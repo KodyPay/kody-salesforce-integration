@@ -32,7 +32,7 @@ echo "✅ Configuration file found: $CONFIG_FILE"
 # Build the project first
 echo ""
 echo "🔨 Building project..."
-mvn compile -q
+mvn test-compile -q
 if [ $? -ne 0 ]; then
     echo "❌ Build failed! Please check compilation errors."
     exit 1
@@ -46,7 +46,7 @@ echo "   This will test all APIs: InitiatePayment, PaymentDetails, GetPayments, 
 echo "   Please wait, this may take up to 2-3 minutes..."
 echo ""
 
-./run.sh genericpubsub.KodyPaymentManualTest $ENVIRONMENT
+mvn exec:java -Dexec.mainClass="genericpubsub.KodyPaymentManualTest" -Dexec.classpathScope="test" -Dexec.args="$ENVIRONMENT" -q
 
 echo ""
 echo "🏁 Test execution completed!"

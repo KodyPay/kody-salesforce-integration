@@ -23,12 +23,13 @@ public class KodyPaymentManualTest {
     private static Thread subscriberThread;
 
     public static void main(String[] args) {
-        if (args.length < 2) {
-            logger.error("❌ Usage: ./run.sh genericpubsub.KodyPaymentManualTest sandbox");
+        if (args.length < 1) {
+            logger.error("❌ Usage: mvn exec:java -Dexec.mainClass=\"genericpubsub.KodyPaymentManualTest\" -Dexec.classpathScope=\"test\" -Dexec.args=\"sandbox\"");
+            logger.error("   Or: ./run-test.sh sandbox");
             return;
         }
 
-        String environment = args[1];
+        String environment = args[0];
         logger.info("🚀 Starting Kody Payment Manual Test for environment: {}", environment);
 
         try {
