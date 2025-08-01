@@ -10,7 +10,7 @@ import com.salesforce.eventbus.protobuf.TopicInfo;
 import com.salesforce.eventbus.protobuf.TopicRequest;
 
 import utility.CommonContext;
-import utility.ExampleConfigurations;
+import utility.ApplicationConfig;
 
 /**
  * An example that retrieves the Schema of a single-topic.
@@ -22,7 +22,7 @@ import utility.ExampleConfigurations;
  */
 public class GetSchema extends CommonContext {
 
-    public GetSchema(final ExampleConfigurations options) {
+    public GetSchema(final ApplicationConfig options) {
         super(options);
     }
 
@@ -48,7 +48,7 @@ public class GetSchema extends CommonContext {
     }
 
     public static void main(String[] args) throws IOException {
-        ExampleConfigurations exampleConfigurations = new ExampleConfigurations("arguments-" + args[1] + ".yaml");
+        ApplicationConfig exampleConfigurations = new ApplicationConfig("arguments-" + args[1] + ".yaml");
 
         // Using the try-with-resource statement. The CommonContext class implements AutoCloseable in
         // order to close the resources used.

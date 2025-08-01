@@ -10,11 +10,11 @@ import java.io.InputStream;
 import java.util.HashMap;
 
 /**
- * The ExampleConfigurations class is used for setting up the configurations for running the examples.
+ * The ApplicationConfig class is used for setting up the configurations for running the examples.
  * The configurations can be read from a YAML file or created directly via an object. It also sets
  * default values when an optional configuration is not specified.
  */
-public class ExampleConfigurations {
+public class ApplicationConfig {
     private String username;
     private String password;
     private String loginUrl;
@@ -34,13 +34,16 @@ public class ExampleConfigurations {
     private String managedSubscriptionId;
     private String developerName;
     private String userId;
+    private String kodyHostname;
+    private String kodyApiKey;
+    private String kodyStoreId;
 
-    public ExampleConfigurations() {
+    public ApplicationConfig() {
         this(null, null, null, null, null,
                 null, null, null, 5, false, 5, false,
                 false, false, ReplayPreset.LATEST, null, null, null, null);
     }
-    public ExampleConfigurations(String filename) throws IOException {
+    public ApplicationConfig(String filename) throws IOException {
 
         Yaml yaml = new Yaml();
         InputStream inputStream = new FileInputStream("src/main/resources/"+filename);
@@ -83,15 +86,20 @@ public class ExampleConfigurations {
 
         this.developerName = obj.get("MANAGED_SUB_DEVELOPER_NAME") == null ? null : obj.get("MANAGED_SUB_DEVELOPER_NAME").toString();
         this.managedSubscriptionId = obj.get("MANAGED_SUB_ID") == null ? null : obj.get("MANAGED_SUB_ID").toString();
+        
+        // Reading Kody configuration
+        this.kodyHostname = obj.get("KODY_HOSTNAME") == null ? null : obj.get("KODY_HOSTNAME").toString();
+        this.kodyApiKey = obj.get("KODY_API_KEY") == null ? null : obj.get("KODY_API_KEY").toString();
+        this.kodyStoreId = obj.get("KODY_STORE_ID") == null ? null : obj.get("KODY_STORE_ID").toString();
     }
 
-    public ExampleConfigurations(String username, String password, String loginUrl,
+    public ApplicationConfig(String username, String password, String loginUrl,
                                  String pubsubHost, int pubsubPort, String topic) {
         this(username, password, loginUrl, null, null, pubsubHost, pubsubPort, topic,
                 5, false, Integer.MAX_VALUE, false, false, false, ReplayPreset.LATEST, null, null, null, null);
     }
 
-    public ExampleConfigurations(String username, String password, String loginUrl, String tenantId, String accessToken,
+    public ApplicationConfig(String username, String password, String loginUrl, String tenantId, String accessToken,
                                  String pubsubHost, Integer pubsubPort, String topic, Integer numberOfEventsToPublish,
                                  Boolean singlePublishRequest, Integer numberOfEventsToSubscribeInEachFetchRequest,
                                  Boolean processChangedFields, Boolean plaintextChannel, Boolean providedLoginUrl,
@@ -269,6 +277,30 @@ public class ExampleConfigurations {
         this.userId = userId;
     }
 
+    public String getKodyHostname() {
+        return kodyHostname;
+    }
+
+    public void setKodyHostname(String kodyHostname) {
+        this.kodyHostname = kodyHostname;
+    }
+
+    public String getKodyApiKey() {
+        return kodyApiKey;
+    }
+
+    public void setKodyApiKey(String kodyApiKey) {
+        this.kodyApiKey = kodyApiKey;
+    }
+
+    public String getKodyStoreId() {
+        return kodyStoreId;
+    }
+
+    public void setKodyStoreId(String kodyStoreId) {
+        this.kodyStoreId = kodyStoreId;
+    }
+
     /**
      * NOTE: replayIds are meant to be opaque (See docs: https://developer.salesforce.com/docs/platform/pub-sub-api/guide/intro.html)
      * and this is used for example purposes only. A long-lived subscription client will use the stored replay to
@@ -289,10 +321,10 @@ public class ExampleConfigurations {
     }
 
     /**
-     * 将 ByteString 类型的 replayId 转换回原来的输入字符串格式。
+     * Converts ByteString type replayId back to the original input string format.
      *
-     * @param replayId 要转换的 ByteString 类型的 replayId
-     * @return 转换后的字符串，格式类似于 "[1, 2, 3]"
+     * @param replayId The ByteString type replayId to convert
+     * @return The converted string, formatted like "[1, 2, 3]"
      */
     public String getReplayIdStringFromByteString(ByteString replayId) {
         StringBuilder sb = new StringBuilder("[");

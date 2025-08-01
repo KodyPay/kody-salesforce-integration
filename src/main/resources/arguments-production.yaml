@@ -61,8 +61,8 @@ MANAGED_SUB_ID: null
 # Kody Payment Integration Configurations:
 # =========================
 # Kody gRPC API Hostname, -ap for Asia region and -eu for Europe region
-KODY_HOSTNAME: grpc-staging-ap.kodypay.com
+KODY_HOSTNAME: grpc-eu.kodypay.com
 # Kody API Key for authentication
 KODY_API_KEY:
 # Kody Store ID for payment requests
-KODY_STORE_ID: 7fbec013-34e1-4e93-a0ee-f4f91b94eb17
+KODY_STORE_ID:

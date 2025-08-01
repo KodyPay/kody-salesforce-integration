@@ -2,7 +2,6 @@ package utility;
 
 import com.google.common.base.CaseFormat;
 import com.google.protobuf.ByteString;
-import com.kodypay.grpc.ecom.v1.PaymentInitiationRequest;
 import com.salesforce.eventbus.protobuf.*;
 import io.grpc.*;
 import org.apache.avro.Schema;
@@ -52,7 +51,7 @@ public class CommonContext implements AutoCloseable {
     protected String userId;
 
 
-    public CommonContext(final ExampleConfigurations options) {
+    public CommonContext(final ApplicationConfig options) {
         String grpcHost = options.getPubsubHost();
         int grpcPort = options.getPubsubPort();
         logger.info("Using grpcHost {} and grpcPort {}", grpcHost, grpcPort);
@@ -104,7 +103,7 @@ public class CommonContext implements AutoCloseable {
      * @param options Command line arguments passed.
      * @return CallCredentials
      */
-    public CallCredentials setupCallCredentials(ExampleConfigurations options) {
+    public CallCredentials setupCallCredentials(ApplicationConfig options) {
         if (options.getAccessToken() != null) {
             try {
                 return sessionTokenService.loginWithAccessToken(options.getLoginUrl(),
@@ -187,11 +186,13 @@ public class CommonContext implements AutoCloseable {
      * accordingly for an event of your choice.
      *
      * @param schema schema of the topic
-     * @return
+     * @return GenericRecord representing the event
      */
     public GenericRecord createEventMessage(Schema schema) {
         // Update CreatedById with the appropriate User Id from your org.
-        return createEventMessage(schema, 0);
+        return new GenericRecordBuilder(schema).set("CreatedDate", System.currentTimeMillis())
+                .set("CreatedById", "<User_Id>").set("Order_Number__c", "1")
+                .set("City__c", "Los Angeles").set("Amount__c", 35.0).build();
     }
 
     /**
@@ -202,58 +203,43 @@ public class CommonContext implements AutoCloseable {
      *
      * @param schema schema of the topic
      * @param counter counter to be appended towards the end of any Text Field
-     * @return
+     * @return GenericRecord representing the event
      */
     public GenericRecord createEventMessage(Schema schema, final int counter) {
-        PaymentInitiationRequest request = PaymentInitiationRequest.newBuilder()
-                .setStoreId("abc")
-                .setPaymentReference("123-456" + counter)
-                .setOrderId("123")
-                .setAmountMinorUnits(100)
-                .setCurrency("GBP")
-                .setReturnUrl("https://xxx.com")
-                .setPayerStatement("1")
-                .setPayerEmailAddress("payer@example.com")
-                .setPayerLocale("en-GB")
-                .setPayerIpAddress("127.0.0.1")
-                .setExpiry(PaymentInitiationRequest.ExpirySettings.newBuilder()
-                        .setShowTimer(true)
-                        .setExpiringSeconds(3000)
-                        .build())
-                .build();
-
+        // Update CreatedById with the appropriate User Id from your org.
         return new GenericRecordBuilder(schema).set("CreatedDate", System.currentTimeMillis())
-                .set("CreatedBy", this.userId)
-                .set("store_id__c", request.getStoreId())
-                .set("payment_reference__c", request.getPaymentReference())
-                .set("order_id__c", request.getOrderId())
-                .set("amount_minor_units__c", request.getAmountMinorUnits())
-                .set("currency__c", request.getCurrency())
-                .set("return_url__c", request.getReturnUrl())
-                .set("payer_statement__c", request.getPayerStatement())
-                .set("payer_email_address__c", request.getPayerEmailAddress())
-                .set("payer_locale__c", request.getPayerLocale())
-                .set("payer_ip_address__c", request.getPayerIpAddress())
-                .build();
+                .set("CreatedById", "<User_Id>").set("Order_Number__c", String.valueOf(counter+1))
+                .set("City__c", "Los Angeles").set("Amount__c", 35.0).build();
     }
 
+    /**
+     * Helper function to create multiple events for testing purposes.
+     *
+     * @param schema schema of the topic
+     * @param numEvents number of events to create
+     * @return List of GenericRecord representing the events
+     */
     public List<GenericRecord> createEventMessages(Schema schema, final int numEvents) {
-        logger.info("UserId: " + this.userId);
+        String[] orderNumbers = {"99","100","101","102","103"};
+        String[] cities = {"Los Angeles", "New York", "San Francisco", "San Jose", "Boston"};
+        Double[] amounts = {35.0, 20.0, 2.0, 123.0, 180.0};
+
         // Update CreatedById with the appropriate User Id from your org.
         List<GenericRecord> events = new ArrayList<>();
         for (int i=0; i<numEvents; i++) {
-            events.add(createEventMessage(schema, i));
+            events.add(new GenericRecordBuilder(schema).set("CreatedDate", System.currentTimeMillis())
+                    .set("CreatedById", "<User_Id>").set("Order_Number__c", orderNumbers[i % 5])
+                    .set("City__c", cities[i % 5]).set("Amount__c", amounts[i % 5]).build());
         }
         return events;
     }
-
 
     /**
      * Helper function to print the gRPC exception and trailers while a
      * StatusRuntimeException is caught
      *
-     * @param context
-     * @param e
+     * @param context The context description
+     * @param e The exception to print
      */
     public static final void printStatusRuntimeException(final String context, final Exception e) {
         logger.error(context);
@@ -275,13 +261,13 @@ public class CommonContext implements AutoCloseable {
     /**
      * Helper function to deserialize the event payload received in bytes.
      *
-     * @param schema
-     * @param payload
-     * @return
-     * @throws IOException
+     * @param schema The Avro schema for deserialization
+     * @param payload The byte payload to deserialize
+     * @return GenericRecord representing the deserialized event
+     * @throws IOException If deserialization fails
      */
     public static GenericRecord deserialize(Schema schema, ByteString payload) throws IOException {
-        DatumReader<GenericRecord> reader = new GenericDatumReader<GenericRecord>(schema);
+        DatumReader<GenericRecord> reader = new GenericDatumReader<>(schema);
         ByteArrayInputStream in = new ByteArrayInputStream(payload.toByteArray());
         BinaryDecoder decoder = DecoderFactory.get().directBinaryDecoder(in, null);
         return reader.read(null, decoder);
@@ -290,10 +276,9 @@ public class CommonContext implements AutoCloseable {
     /**
      * Helper function to process and print bitmap fields
      *
-     * @param schema
-     * @param record
-     * @param bitmapField
-     * @return
+     * @param schema The Avro schema
+     * @param record The GenericRecord containing the event
+     * @param bitmapField The bitmap field name to process
      */
     public static void processAndPrintBitmapFields(Schema schema, GenericRecord record, String bitmapField) {
         String bitmapFieldPascal = CaseFormat.LOWER_CAMEL.to(CaseFormat.UPPER_CAMEL, bitmapField);
@@ -320,12 +305,13 @@ public class CommonContext implements AutoCloseable {
     /**
      * Helper function to setup Subscribe configurations in some examples.
      *
-     * @param requiredParams
-     * @param topic
-     * @return
+     * @param requiredParams Required configuration parameters
+     * @param topic Topic name
+     * @param numberOfEvents Number of events to fetch
+     * @return ApplicationConfig configured for subscription
      */
-    public static ExampleConfigurations setupSubscriberParameters(ExampleConfigurations requiredParams, String topic, int numberOfEvents) {
-        ExampleConfigurations subParams = new ExampleConfigurations();
+    public static ApplicationConfig setupSubscriberParameters(ApplicationConfig requiredParams, String topic, int numberOfEvents) {
+        ApplicationConfig subParams = new ApplicationConfig();
         setCommonParameters(subParams, requiredParams);
         subParams.setTopic(topic);
         subParams.setReplayPreset(ReplayPreset.LATEST);
@@ -336,12 +322,12 @@ public class CommonContext implements AutoCloseable {
     /**
      * Helper function to setup Publish configurations in some examples.
      *
-     * @param requiredParams
-     * @param topic
-     * @return
+     * @param requiredParams Required configuration parameters
+     * @param topic Topic name
+     * @return ApplicationConfig configured for publishing
      */
-    public static ExampleConfigurations setupPublisherParameters(ExampleConfigurations requiredParams, String topic) {
-        ExampleConfigurations pubParams = new ExampleConfigurations();
+    public static ApplicationConfig setupPublisherParameters(ApplicationConfig requiredParams, String topic) {
+        ApplicationConfig pubParams = new ApplicationConfig();
         setCommonParameters(pubParams, requiredParams);
         pubParams.setTopic(topic);
         return pubParams;
@@ -350,10 +336,10 @@ public class CommonContext implements AutoCloseable {
     /**
      * Helper function to setup common configurations for publish and subscribe operations.
      *
-     * @param ep
-     * @param requiredParams
+     * @param ep Target configuration object
+     * @param requiredParams Source configuration parameters
      */
-    private static void setCommonParameters(ExampleConfigurations ep, ExampleConfigurations requiredParams) {
+    private static void setCommonParameters(ApplicationConfig ep, ApplicationConfig requiredParams) {
         ep.setLoginUrl(requiredParams.getLoginUrl());
         ep.setPubsubHost(requiredParams.getPubsubHost());
         ep.setPubsubPort(requiredParams.getPubsubPort());
