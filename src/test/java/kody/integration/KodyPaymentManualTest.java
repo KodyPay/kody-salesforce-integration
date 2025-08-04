@@ -25,7 +25,7 @@ public class KodyPaymentManualTest {
 
     public static void main(String[] args) {
         if (args.length < 1) {
-            logger.error("❌ Usage: mvn exec:java -Dexec.mainClass=\"genericpubsub.KodyPaymentManualTest\" -Dexec.classpathScope=\"test\" -Dexec.args=\"sandbox\"");
+            logger.error("❌ Usage: mvn exec:java -Dexec.mainClass=\"kody.integration.KodyPaymentManualTest\" -Dexec.classpathScope=\"test\" -Dexec.args=\"sandbox\"");
             logger.error("   Or: ./run-test.sh sandbox");
             return;
         }

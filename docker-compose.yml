@@ -12,7 +12,7 @@ services:
       - ./logs:/app/logs
     ports:
       - "8080:8080"  # For health checks/monitoring if needed
-    command: ["java", "-cp", "app.jar", "genericpubsub.KodyPaymentSubscriber", "sandbox"]
+    command: ["java", "-cp", "app.jar", "kody.integration.KodyPaymentService", "sandbox"]
     healthcheck:
       test: ["CMD", "pgrep", "-f", "java.*app.jar"]
       interval: 30s
