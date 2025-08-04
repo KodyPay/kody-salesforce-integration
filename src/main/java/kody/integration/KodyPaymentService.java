@@ -1,4 +1,4 @@
-package genericpubsub;
+package kody.integration;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -36,9 +36,93 @@ import java.util.concurrent.TimeUnit;
 /**
  * Kody Payment Subscriber using full streaming for both pub and sub
  */
-public class KodyPaymentSubscriber extends CommonContext {
-    private static final Logger logger = LoggerFactory.getLogger(KodyPaymentSubscriber.class);
+public class KodyPaymentService extends CommonContext {
+    private static final Logger logger = LoggerFactory.getLogger(KodyPaymentService.class);
 
+    /**
+     * Supported Kody Payment API Methods
+     * 
+     * All available methods are clearly defined here for easy management.
+     * Each method includes its request/response types and the gRPC call function.
+     * 
+     * To add a new method:
+     * 1. Add it to this enum with request/response method names and function
+     * 2. That's it! The generic handler will take care of the rest
+     */
+    public enum PaymentMethod {
+        INITIATE_PAYMENT(
+            "request.ecom.v1.InitiatePayment", 
+            "response.ecom.v1.InitiatePayment",
+            PaymentInitiationRequest.newBuilder(),
+            (service, request, apiKey) -> service.callKodyInitiatePayment((PaymentInitiationRequest) request, apiKey)
+        ),
+        PAYMENT_DETAILS(
+            "request.ecom.v1.PaymentDetails", 
+            "response.ecom.v1.PaymentDetails",
+            PaymentDetailsRequest.newBuilder(),
+            (service, request, apiKey) -> service.callKodyPaymentDetails((PaymentDetailsRequest) request, apiKey)
+        ),
+        GET_PAYMENTS(
+            "request.ecom.v1.GetPayments", 
+            "response.ecom.v1.GetPayments",
+            GetPaymentsRequest.newBuilder(),
+            (service, request, apiKey) -> service.callKodyGetPayments((GetPaymentsRequest) request, apiKey)
+        ),
+        REFUND(
+            "request.ecom.v1.Refund", 
+            "response.ecom.v1.Refund",
+            RefundRequest.newBuilder(),
+            (service, request, apiKey) -> service.callKodyRefund((RefundRequest) request, apiKey)
+        );
+
+        private final String requestMethod;
+        private final String responseMethod;
+        private final com.google.protobuf.Message.Builder requestBuilder;
+        private final KodyApiFunction kodyApiFunction;
+
+        @FunctionalInterface
+        interface KodyApiFunction {
+            com.google.protobuf.Message call(KodyPaymentService service, com.google.protobuf.Message request, String apiKey) throws Exception;
+        }
+
+        PaymentMethod(String requestMethod, String responseMethod, 
+                     com.google.protobuf.Message.Builder requestBuilder,
+                     KodyApiFunction kodyApiFunction) {
+            this.requestMethod = requestMethod;
+            this.responseMethod = responseMethod;
+            this.requestBuilder = requestBuilder;
+            this.kodyApiFunction = kodyApiFunction;
+        }
+
+        public com.google.protobuf.Message.Builder getRequestBuilder() { 
+            return requestBuilder.clone(); 
+        }
+        
+        public com.google.protobuf.Message callKodyApi(KodyPaymentService service, com.google.protobuf.Message request, String apiKey) throws Exception {
+            return kodyApiFunction.call(service, request, apiKey);
+        }
+
+        public String getRequestMethod() { return requestMethod; }
+        public String getResponseMethod() { return responseMethod; }
+
+        public static PaymentMethod fromRequestMethod(String method) {
+            for (PaymentMethod pm : values()) {
+                if (pm.requestMethod.equals(method)) {
+                    return pm;
+                }
+            }
+            return null;
+        }
+
+        /**
+         * Get all available request methods for logging/documentation
+         */
+        public static String[] getAllRequestMethods() {
+            return java.util.Arrays.stream(values())
+                    .map(PaymentMethod::getRequestMethod)
+                    .toArray(String[]::new);
+        }
+    }
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final int TIMEOUT_SECONDS = 300;
@@ -50,11 +134,11 @@ public class KodyPaymentSubscriber extends CommonContext {
     private StreamObserver<FetchRequest> subscribeStream;
     private StreamObserver<PublishRequest> publishStream;
 
-    public KodyPaymentSubscriber(ApplicationConfig exampleConfigurations) {
-        super(exampleConfigurations);
+    public KodyPaymentService(ApplicationConfig config) {
+        super(config);
 
         // Read Kody config from YAML
-        this.kodyHostname = exampleConfigurations.getKodyHostname();
+        this.kodyHostname = config.getKodyHostname();
 
         // Validate Kody configuration
         if (this.kodyHostname == null || this.kodyHostname.isEmpty()) {
@@ -76,8 +160,14 @@ public class KodyPaymentSubscriber extends CommonContext {
             throw e;
         }
 
-        this.replayPreset = exampleConfigurations.getReplayPreset();
-        this.customReplayId = exampleConfigurations.getReplayId();
+        this.replayPreset = config.getReplayPreset();
+        this.customReplayId = config.getReplayId();
+
+        // Log all available payment methods on startup
+        logger.info("🚀 Kody Payment Service initialized with {} methods:", PaymentMethod.values().length);
+        for (PaymentMethod method : PaymentMethod.values()) {
+            logger.info("   📋 {} → {}", method.getRequestMethod(), method.getResponseMethod());
+        }
 
         initializeStreams();
     }
@@ -226,32 +316,20 @@ public class KodyPaymentSubscriber extends CommonContext {
             
             JsonNode payloadJson = objectMapper.readTree(payload);
 
-            String responseJson;
-            switch (method) {
-                case "request.ecom.v1.InitiatePayment":
-                    responseJson = handleInitiatePayment(payloadJson, apiKey);
-                    publishResponse(correlationId, "response.ecom.v1.InitiatePayment", responseJson);
-                    break;
-
-                case "request.ecom.v1.PaymentDetails":
-                    responseJson = handlePaymentDetails(payloadJson, apiKey);
-                    publishResponse(correlationId, "response.ecom.v1.PaymentDetails", responseJson);
-                    break;
-
-                case "request.ecom.v1.GetPayments":
-                    responseJson = handleGetPayments(payloadJson, apiKey);
-                    publishResponse(correlationId, "response.ecom.v1.GetPayments", responseJson);
-                    break;
-
-                case "request.ecom.v1.Refund":
-                    responseJson = handleRefund(payloadJson, apiKey);
-                    publishResponse(correlationId, "response.ecom.v1.Refund", responseJson);
-                    break;
-
-                default:
-                    logger.error("❌ Unsupported method: {}", method);
-                    publishErrorResponse(correlationId, "Unsupported method: " + method);
+            // Look up the payment method from our registry
+            PaymentMethod paymentMethod = PaymentMethod.fromRequestMethod(method);
+            
+            if (paymentMethod == null) {
+                logger.error("❌ Unsupported method: {} (Available: {})", method, 
+                    String.join(", ", PaymentMethod.getAllRequestMethods()));
+                publishErrorResponse(correlationId, "Unsupported method: " + method);
+                return;
             }
+
+            logger.info("💳 Processing method: {} → {}", paymentMethod.getRequestMethod(), paymentMethod.getResponseMethod());
+            
+            String responseJson = processPaymentMethod(paymentMethod, payloadJson, apiKey);
+            publishResponse(correlationId, paymentMethod.getResponseMethod(), responseJson);
 
         } catch (Exception e) {
             logger.error("❌ Error processing request", e);
@@ -259,33 +337,27 @@ public class KodyPaymentSubscriber extends CommonContext {
         }
     }
 
-    private String handleInitiatePayment(JsonNode payloadJson, String apiKey) throws Exception {
+    /**
+     * Generic method processor - handles all payment methods using the enum configuration
+     */
+    private String processPaymentMethod(PaymentMethod paymentMethod, JsonNode payloadJson, String apiKey) throws Exception {
         logger.info("📦 Request: {}", payloadJson.toString());
 
-        PaymentInitiationRequest.Builder requestBuilder = PaymentInitiationRequest.newBuilder();
+        // Parse JSON to protobuf request using the method's builder
+        com.google.protobuf.Message.Builder requestBuilder = paymentMethod.getRequestBuilder();
         JsonFormat.parser().ignoringUnknownFields().merge(payloadJson.toString(), requestBuilder);
-        PaymentInitiationRequest request = requestBuilder.build();
+        com.google.protobuf.Message request = requestBuilder.build();
 
-        PaymentInitiationResponse response = callKodyInitiatePayment(request, apiKey);
+        // Call the Kody API using the method's function
+        com.google.protobuf.Message response = paymentMethod.callKodyApi(this, request, apiKey);
 
+        // Convert response to JSON
         String responseJson = JsonFormat.printer().omittingInsignificantWhitespace().print(response);
         logger.info("📦 Response: {}", responseJson);
+        
         return responseJson;
     }
 
-    private String handlePaymentDetails(JsonNode payloadJson, String apiKey) throws Exception {
-        logger.info("📦 Request: {}", payloadJson.toString());
-
-        PaymentDetailsRequest.Builder requestBuilder = PaymentDetailsRequest.newBuilder();
-        JsonFormat.parser().ignoringUnknownFields().merge(payloadJson.toString(), requestBuilder);
-        PaymentDetailsRequest request = requestBuilder.build();
-
-        PaymentDetailsResponse response = callKodyPaymentDetails(request, apiKey);
-
-        String responseJson = JsonFormat.printer().omittingInsignificantWhitespace().print(response);
-        logger.info("📦 Response: {}", responseJson);
-        return responseJson;
-    }
 
     private PaymentInitiationResponse callKodyInitiatePayment(PaymentInitiationRequest request, String apiKey) {
         ManagedChannel kodyChannel = null;
@@ -343,40 +415,6 @@ public class KodyPaymentSubscriber extends CommonContext {
         }
     }
 
-    private KodyEcomPaymentsServiceGrpc.KodyEcomPaymentsServiceBlockingStub createKodyClient(ManagedChannel channel, String apiKey) {
-        Metadata metadata = new Metadata();
-        metadata.put(Metadata.Key.of("X-API-Key", Metadata.ASCII_STRING_MARSHALLER), apiKey);
-
-        return KodyEcomPaymentsServiceGrpc.newBlockingStub(channel)
-                .withInterceptors(MetadataUtils.newAttachHeadersInterceptor(metadata));
-    }
-
-    private void shutdownChannel(ManagedChannel channel) {
-        try {
-            channel.shutdown();
-            if (!channel.awaitTermination(5, TimeUnit.SECONDS)) {
-                channel.shutdownNow();
-            }
-        } catch (InterruptedException e) {
-            channel.shutdownNow();
-            Thread.currentThread().interrupt();
-        }
-    }
-
-    private String handleGetPayments(JsonNode payloadJson, String apiKey) throws Exception {
-        logger.info("📦 Request: {}", payloadJson.toString());
-
-        GetPaymentsRequest.Builder requestBuilder = GetPaymentsRequest.newBuilder();
-        JsonFormat.parser().ignoringUnknownFields().merge(payloadJson.toString(), requestBuilder);
-        GetPaymentsRequest request = requestBuilder.build();
-
-        GetPaymentsResponse response = callKodyGetPayments(request, apiKey);
-
-        String responseJson = JsonFormat.printer().omittingInsignificantWhitespace().print(response);
-        logger.info("📦 Response: {}", responseJson);
-        return responseJson;
-    }
-
     private GetPaymentsResponse callKodyGetPayments(GetPaymentsRequest request, String apiKey) {
         ManagedChannel kodyChannel = null;
         try {
@@ -400,20 +438,6 @@ public class KodyPaymentSubscriber extends CommonContext {
                 shutdownChannel(kodyChannel);
             }
         }
-    }
-
-    private String handleRefund(JsonNode payloadJson, String apiKey) throws Exception {
-        logger.info("📦 Request: {}", payloadJson.toString());
-
-        RefundRequest.Builder requestBuilder = RefundRequest.newBuilder();
-        JsonFormat.parser().ignoringUnknownFields().merge(payloadJson.toString(), requestBuilder);
-        RefundRequest request = requestBuilder.build();
-
-        RefundResponse response = callKodyRefund(request, apiKey);
-
-        String responseJson = JsonFormat.printer().omittingInsignificantWhitespace().print(response);
-        logger.info("📦 Response: {}", responseJson);
-        return responseJson;
     }
 
     private RefundResponse callKodyRefund(RefundRequest request, String apiKey) {
@@ -448,6 +472,27 @@ public class KodyPaymentSubscriber extends CommonContext {
             }
         }
     }
+
+    private KodyEcomPaymentsServiceGrpc.KodyEcomPaymentsServiceBlockingStub createKodyClient(ManagedChannel channel, String apiKey) {
+        Metadata metadata = new Metadata();
+        metadata.put(Metadata.Key.of("X-API-Key", Metadata.ASCII_STRING_MARSHALLER), apiKey);
+
+        return KodyEcomPaymentsServiceGrpc.newBlockingStub(channel)
+                .withInterceptors(MetadataUtils.newAttachHeadersInterceptor(metadata));
+    }
+
+    private void shutdownChannel(ManagedChannel channel) {
+        try {
+            channel.shutdown();
+            if (!channel.awaitTermination(5, TimeUnit.SECONDS)) {
+                channel.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            channel.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+    }
+
     private void publishResponse(String correlationId, String responseMethod, String responsePayload) {
         try {
             GenericRecord responseEvent = createResponseEvent(correlationId, responseMethod, responsePayload);
@@ -537,19 +582,22 @@ public class KodyPaymentSubscriber extends CommonContext {
     }
 
     public static void main(String[] args) {
+        System.out.println("🔧 DEBUG: Main method started");
         if (args.length < 1) {
-            logger.error("❌ Usage: java -cp app.jar genericpubsub.KodyPaymentSubscriber sandbox");
-            logger.error("   Or: ./run.sh genericpubsub.KodyPaymentSubscriber sandbox");
+            System.out.println("🔧 DEBUG: No arguments provided");
+            logger.error("❌ Usage: java -cp app.jar kody.integration.KodyPaymentService sandbox");
+            logger.error("   Or: ./run.sh kody.integration.KodyPaymentService sandbox");
             return;
         }
 
         String environment = args[0];
+        System.out.println("🔧 DEBUG: Environment: " + environment);
         logger.info("🚀 Starting Kody Payment Subscriber for environment: {}", environment);
 
         try {
-            ApplicationConfig exampleConfigurations = new ApplicationConfig("arguments-" + environment + ".yaml");
+            ApplicationConfig config = new ApplicationConfig("arguments-" + environment + ".yaml");
 
-            try (KodyPaymentSubscriber subscriber = new KodyPaymentSubscriber(exampleConfigurations)) {
+            try (KodyPaymentService subscriber = new KodyPaymentService(config)) {
                 subscriber.subscribeAndProcessPayments();
             }
         } catch (Exception e) {

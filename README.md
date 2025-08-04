@@ -12,7 +12,7 @@ A Java integration between Salesforce Pub/Sub API and Kody Payment API that prov
 ## 🚀 Quick Start
 
 ### Prerequisites
-1. Java 11+ and Maven installed
+1. Java 21+ and Maven installed
 2. Salesforce org with Pub/Sub API access
 3. Kody Payment API credentials
 4. Platform Event configured in Salesforce (see setup guide below)
@@ -140,16 +140,16 @@ Tests all APIs automatically:
 Test specific APIs:
 ```bash
 # Test InitiatePayment
-mvn exec:java -Dexec.mainClass="genericpubsub.KodyPaymentQuickTest" -Dexec.classpathScope="test" -Dexec.args="sandbox request.ecom.v1.InitiatePayment"
+mvn exec:java -Dexec.mainClass="kody.integration.KodyPaymentQuickTest" -Dexec.classpathScope="test" -Dexec.args="sandbox request.ecom.v1.InitiatePayment"
 
 # Test PaymentDetails (requires payment ID)
-mvn exec:java -Dexec.mainClass="genericpubsub.KodyPaymentQuickTest" -Dexec.classpathScope="test" -Dexec.args="sandbox request.ecom.v1.PaymentDetails your-payment-id"
+mvn exec:java -Dexec.mainClass="kody.integration.KodyPaymentQuickTest" -Dexec.classpathScope="test" -Dexec.args="sandbox request.ecom.v1.PaymentDetails your-payment-id"
 
 # Test GetPayments
-mvn exec:java -Dexec.mainClass="genericpubsub.KodyPaymentQuickTest" -Dexec.classpathScope="test" -Dexec.args="sandbox request.ecom.v1.GetPayments"
+mvn exec:java -Dexec.mainClass="kody.integration.KodyPaymentQuickTest" -Dexec.classpathScope="test" -Dexec.args="sandbox request.ecom.v1.GetPayments"
 
 # Test Refund (requires payment ID)
-mvn exec:java -Dexec.mainClass="genericpubsub.KodyPaymentQuickTest" -Dexec.classpathScope="test" -Dexec.args="sandbox request.ecom.v1.Refund your-payment-id"
+mvn exec:java -Dexec.mainClass="kody.integration.KodyPaymentQuickTest" -Dexec.classpathScope="test" -Dexec.args="sandbox request.ecom.v1.Refund your-payment-id"
 ```
 
 ### Manual Testing
@@ -157,13 +157,13 @@ For manual integration testing:
 
 **Terminal 1 - Start Subscriber:**
 ```bash
-./run.sh genericpubsub.KodyPaymentSubscriber sandbox
+./run.sh kody.integration.KodyPaymentService sandbox
 ```
 
 **Terminal 2 - Send Payment Requests:**
 ```bash
 # InitiatePayment
-./run.sh genericpubsub.KodyPaymentPublisher sandbox request.ecom.v1.InitiatePayment '{
+./run.sh samples.KodyPaymentPublisher sandbox request.ecom.v1.InitiatePayment '{
   "storeId": "your-store-id",
   "paymentReference": "pay_123456",
   "amountMinorUnits": 1000,
@@ -174,7 +174,7 @@ For manual integration testing:
 }' 'your-custom-api-key'
 
 # GetPayments
-./run.sh genericpubsub.KodyPaymentPublisher sandbox request.ecom.v1.GetPayments '{
+./run.sh samples.KodyPaymentPublisher sandbox request.ecom.v1.GetPayments '{
   "storeId": "your-store-id",
   "pageCursor": {"page": 1, "pageSize": 10}
 }' 'your-custom-api-key'
@@ -191,8 +191,8 @@ For manual integration testing:
 
 ### Core Components
 
-- **KodyPaymentPublisher** - Generic command-line publisher that accepts any method and JSON payload
-- **KodyPaymentSubscriber** - Real-time event subscriber that acts as a stateless proxy to Kody API
+- **KodyPaymentService** - Real-time payment service that acts as a stateless proxy to Kody API
+- **KodyPaymentPublisher** (Sample) - Generic command-line publisher that accepts any method and JSON payload
 - **ApplicationConfig** - Configuration management for external settings
 - **Test Suite** - Comprehensive testing utilities
 
@@ -204,48 +204,54 @@ The subscriber implements a **pure proxy pattern** where:
 - No automatic injection or fallback to configuration values occurs at runtime
 - Configuration values are used only for automation testing
 
-### Event Flow
+### Request-Response Mapping
 
-```mermaid
-graph TB
-    Client[Client Application] --> Publisher[KodyPaymentPublisher]
-    Publisher --> |1. Publish Event| SF[Salesforce Pub/Sub<br/>/event/KodyPayment__e]
-    
-    SF --> |2. Real-time Event| Subscriber[KodyPaymentSubscriber<br/>Stateless Proxy]
-    
-    Subscriber --> |3. Extract Fields| EventData{Event Fields}
-    EventData --> CorrelationId[correlation_id__c]
-    EventData --> Method[method__c]
-    EventData --> Payload[payload__c<br/>JSON with storeId]
-    EventData --> ApiKey[api_key__c]
-    
-    Subscriber --> |4. Validate| Validation{API Key<br/>Present?}
-    Validation --> |No| Error[Throw Error:<br/>API key required]
-    Validation --> |Yes| KodyAPI[Kody Payment API<br/>grpc-staging-ap.kodypay.com]
-    
-    KodyAPI --> |5. API Response| Subscriber
-    Subscriber --> |6. Publish Response| SF
-    SF --> |7. Correlated Response| Publisher
-    Publisher --> |8. Return Result| Client
-    
-    Config[Configuration YAML<br/>automation testing only] -.-> |Test Values Only| Publisher
-    
-    style Subscriber fill:#e1f5fe
-    style EventData fill:#f3e5f5
-    style KodyAPI fill:#e8f5e8
-    style Config fill:#fff3e0,stroke-dasharray: 5 5
-    style Error fill:#ffebee
+The system uses an **enum-based method registry** for easy method management and visibility. All supported methods are clearly defined in the `PaymentMethod` enum:
+
+```java
+public enum PaymentMethod {
+    INITIATE_PAYMENT("request.ecom.v1.InitiatePayment", "response.ecom.v1.InitiatePayment"),
+    PAYMENT_DETAILS("request.ecom.v1.PaymentDetails", "response.ecom.v1.PaymentDetails"),
+    GET_PAYMENTS("request.ecom.v1.GetPayments", "response.ecom.v1.GetPayments"),
+    REFUND("request.ecom.v1.Refund", "response.ecom.v1.Refund");
+    // Add new methods here...
+}
 ```
 
-**Flow Details:**
-1. **Publisher** sends payment request to Salesforce Pub/Sub topic with all required fields
-2. **Subscriber** receives event in real-time via streaming subscription
-3. **Field Extraction** from Platform Event: correlation_id__c, method__c, payload__c, api_key__c
-4. **Validation** ensures API key is present (pure proxy - no fallback to config)
-5. **Kody API Call** using extracted API key and JSON payload with storeId
-6. **Response Publishing** back to same Salesforce topic with correlation ID
-7. **Correlated Response** received by publisher waiting for specific correlation ID
-8. **Result Return** to client application
+**Centralized Method Processing:**
+```java
+// Look up method from registry
+PaymentMethod paymentMethod = PaymentMethod.fromRequestMethod(method);
+
+if (paymentMethod == null) {
+    logger.error("❌ Unsupported method: {} (Available: {})", method, 
+        String.join(", ", PaymentMethod.getAllRequestMethods()));
+    return;
+}
+
+// Process using enum-based dispatcher
+String responseJson = processPaymentMethod(paymentMethod, payloadJson, apiKey);
+publishResponse(correlationId, paymentMethod.getResponseMethod(), responseJson);
+```
+
+**Adding New Methods (5 Easy Steps):**
+1. Add the new method to the `PaymentMethod` enum with request/response names
+2. Add a case in the `processPaymentMethod()` switch statement  
+3. Implement the `handleNewMethod()` method
+4. Implement the `callKodyNewMethod()` gRPC call
+5. Update test cases as needed
+
+**Benefits of This Approach:**
+- ✅ **Clear Visibility**: All methods visible at a glance in the enum
+- ✅ **Type Safety**: Compile-time checking of method names
+- ✅ **Easy Maintenance**: Single place to manage method mappings
+- ✅ **Runtime Introspection**: Can list all available methods programmatically
+- ✅ **Better Error Messages**: Shows available methods when invalid method is used
+
+**Method Naming Convention:**
+- Request methods: `request.ecom.v1.MethodName`
+- Response methods: `response.ecom.v1.MethodName`
+- Error responses: `response.error`
 
 ## ⚙️ Configuration
 
@@ -275,15 +281,16 @@ KODY_STORE_ID: your-store-id  # Used for automation testing only
 ```
 src/
 ├── main/java/
-│   ├── genericpubsub/
-│   │   ├── KodyPaymentPublisher.java    # Generic command-line publisher
-│   │   ├── KodyPaymentSubscriber.java   # Real-time event subscriber
+│   ├── kody/integration/
+│   │   └── KodyPaymentService.java      # Real-time payment service (main service)
+│   ├── samples/
+│   │   ├── KodyPaymentPublisher.java    # Sample command-line publisher
 │   │   ├── GetSchema.java               # Utility for schema operations
 │   │   └── GetTopic.java                # Utility for topic operations
 │   └── utility/
 │       ├── ApplicationConfig.java       # Configuration management
 │       └── CommonContext.java           # Shared Salesforce context
-└── test/java/genericpubsub/
+└── test/java/kody/integration/
     ├── KodyPaymentManualTest.java       # Comprehensive integration test
     ├── KodyPaymentQuickTest.java        # Individual API testing
     └── KodyPaymentIntegrationTest.java  # JUnit integration test
@@ -311,35 +318,230 @@ These errors are **expected** and confirm the integration is working - you're su
 - **Solution**: The project now includes all required gRPC dependencies. Clean rebuild should resolve any lingering issues:
   ```bash
   mvn clean install
-  ./run.sh genericpubsub.KodyPaymentSubscriber sandbox
+  ./run.sh kody.integration.KodyPaymentService sandbox
   ```
 
 **Q: Multiple versions of the same library causing conflicts**
 - **Solution**: Dependencies have been cleaned up and unified. All protobuf libraries now use the same version (4.31.0).
 
-## 📝 Usage Examples
+## 📝 Comprehensive Usage Examples
+
+### 1. Running the Main Service
+
+Start the payment subscriber service:
+```bash
+# Start in sandbox environment
+./run.sh kody.integration.KodyPaymentService sandbox
+
+# Start in production environment  
+./run.sh genericpubsub.KodyPaymentSubscriber production
+```
+
+### 2. Sample Publisher Commands
+
+All examples use the sample publisher in the `samples` package:
+
+#### InitiatePayment Examples
+```bash
+# Basic payment initiation
+./run.sh samples.KodyPaymentPublisher sandbox request.ecom.v1.InitiatePayment '{
+  "storeId": "your-store-id",
+  "paymentReference": "pay_$(date +%s)",
+  "amountMinorUnits": 2500,
+  "currency": "GBP", 
+  "orderId": "order_$(date +%s)",
+  "returnUrl": "https://yoursite.com/payment/return",
+  "payerEmailAddress": "customer@example.com"
+}' 'your-api-key'
+
+# Payment with customer details
+./run.sh samples.KodyPaymentPublisher sandbox request.ecom.v1.InitiatePayment '{
+  "storeId": "your-store-id",
+  "paymentReference": "pay_detailed_$(date +%s)",
+  "amountMinorUnits": 5000,
+  "currency": "EUR",
+  "orderId": "order_detailed_$(date +%s)", 
+  "returnUrl": "https://yoursite.com/success",
+  "payerEmailAddress": "premium@customer.com",
+  "payerName": "John Smith",
+  "description": "Premium subscription payment"
+}' 'your-api-key'
+```
+
+#### PaymentDetails Examples
+```bash
+# Get payment details by ID
+./run.sh samples.KodyPaymentPublisher sandbox request.ecom.v1.PaymentDetails '{
+  "storeId": "your-store-id",
+  "paymentId": "P._pay.ABC123XYZ"
+}' 'your-api-key'
+
+# Multiple payment details (if supported)
+./run.sh samples.KodyPaymentPublisher sandbox request.ecom.v1.PaymentDetails '{
+  "storeId": "your-store-id",
+  "paymentIds": ["P._pay.ABC123", "P._pay.DEF456"]
+}' 'your-api-key'
+```
+
+#### GetPayments Examples
+```bash
+# Basic payment listing
+./run.sh samples.KodyPaymentPublisher sandbox request.ecom.v1.GetPayments '{
+  "storeId": "your-store-id",
+  "pageCursor": {"page": 1, "pageSize": 10}
+}' 'your-api-key'
+
+# Filtered payment listing by date
+./run.sh samples.KodyPaymentPublisher sandbox request.ecom.v1.GetPayments '{
+  "storeId": "your-store-id",
+  "pageCursor": {"page": 1, "pageSize": 20},
+  "dateFrom": "2024-01-01T00:00:00Z",
+  "dateTo": "2024-12-31T23:59:59Z"
+}' 'your-api-key'
+
+# Get payments by status
+./run.sh samples.KodyPaymentPublisher sandbox request.ecom.v1.GetPayments '{
+  "storeId": "your-store-id", 
+  "pageCursor": {"page": 1, "pageSize": 50},
+  "status": "COMPLETED"
+}' 'your-api-key'
+```
+
+#### Refund Examples
+```bash
+# Full refund
+./run.sh samples.KodyPaymentPublisher sandbox request.ecom.v1.Refund '{
+  "storeId": "your-store-id",
+  "paymentId": "P._pay.ABC123XYZ",
+  "amount": "25.00",
+  "reason": "Customer request"
+}' 'your-api-key'
+
+# Partial refund
+./run.sh samples.KodyPaymentPublisher sandbox request.ecom.v1.Refund '{
+  "storeId": "your-store-id",
+  "paymentId": "P._pay.ABC123XYZ", 
+  "amount": "10.50",
+  "reason": "Partial cancellation"
+}' 'your-api-key'
+```
+
+### 3. Using Different API Keys
+
+Each request can use a different API key for multi-tenant scenarios:
+
+```bash
+# Tenant A payment
+./run.sh samples.KodyPaymentPublisher sandbox request.ecom.v1.InitiatePayment '{
+  "storeId": "tenant-a-store-id",
+  "paymentReference": "tenant_a_$(date +%s)",
+  "amountMinorUnits": 1000,
+  "currency": "GBP"
+}' 'tenant-a-api-key'
+
+# Tenant B payment  
+./run.sh samples.KodyPaymentPublisher sandbox request.ecom.v1.InitiatePayment '{
+  "storeId": "tenant-b-store-id", 
+  "paymentReference": "tenant_b_$(date +%s)",
+  "amountMinorUnits": 2000,
+  "currency": "USD"
+}' 'tenant-b-api-key'
+```
+
+### 4. Batch Operations
+
+Process multiple payments in sequence:
+
+```bash
+#!/bin/bash
+# batch-payments.sh - Process multiple payments
+
+API_KEY="your-api-key"
+STORE_ID="your-store-id"
+
+for i in {1..5}; do
+  echo "Processing payment $i"
+  ./run.sh samples.KodyPaymentPublisher sandbox request.ecom.v1.InitiatePayment "{
+    \"storeId\": \"$STORE_ID\",
+    \"paymentReference\": \"batch_pay_$i\",
+    \"amountMinorUnits\": $((1000 * i)),
+    \"currency\": \"GBP\",
+    \"orderId\": \"batch_order_$i\",
+    \"returnUrl\": \"https://example.com/return\",
+    \"payerEmailAddress\": \"batch$i@example.com\"
+  }" "$API_KEY"
+  
+  sleep 2  # Wait between requests
+done
+```
+
+### 5. Error Handling Examples
+
+Test error scenarios:
+
+```bash
+# Invalid method
+./run.sh samples.KodyPaymentPublisher sandbox request.invalid.method '{}' 'your-api-key'
+
+# Missing required fields
+./run.sh samples.KodyPaymentPublisher sandbox request.ecom.v1.InitiatePayment '{
+  "paymentReference": "incomplete_payment"
+}' 'your-api-key'
+
+# Invalid API key
+./run.sh samples.KodyPaymentPublisher sandbox request.ecom.v1.GetPayments '{
+  "storeId": "your-store-id"
+}' 'invalid-api-key'
+```
+
+### 6. Development Utilities
+
+Use utility classes for schema and topic inspection:
+
+```bash
+# Get topic information
+./run.sh samples.GetTopic sandbox
+
+# Get schema details
+./run.sh samples.GetSchema sandbox
+
+# Inspect platform event structure
+./run.sh samples.GetSchema sandbox /event/KodyPayment__e
+```
+
+### 7. Integration with External Systems
+
+#### Webhook Integration
+```bash
+# Example: Process webhook payload
+WEBHOOK_PAYLOAD='{"paymentId": "P._pay.WEBHOOK123", "storeId": "webhook-store"}'
+
+./run.sh samples.KodyPaymentPublisher sandbox request.ecom.v1.PaymentDetails "$WEBHOOK_PAYLOAD" 'webhook-api-key'
+```
+
+#### Scheduled Operations
+```bash
+#!/bin/bash
+# daily-report.sh - Get daily payment report
+
+TODAY=$(date +%Y-%m-%d)
+./run.sh samples.KodyPaymentPublisher sandbox request.ecom.v1.GetPayments "{
+  \"storeId\": \"report-store-id\",
+  \"pageCursor\": {\"page\": 1, \"pageSize\": 100},
+  \"dateFrom\": \"${TODAY}T00:00:00Z\",
+  \"dateTo\": \"${TODAY}T23:59:59Z\"
+}" 'report-api-key' > "payments_$TODAY.json"
+```
+
+### 8. Advanced Usage Examples
 
 ### Passing API Keys
 The publisher supports two modes for API key handling:
 
-**Option 1: Using API Key from Configuration (Default):**
+**Using Custom API Key (Required):**
 ```bash
-# Uses KODY_API_KEY from config/arguments-sandbox.yaml
-./run.sh genericpubsub.KodyPaymentPublisher sandbox request.ecom.v1.InitiatePayment '{
-  "storeId": "your-store-id",
-  "paymentReference": "pay_123456",
-  "amountMinorUnits": 1000,
-  "currency": "GBP",
-  "orderId": "order_123456",
-  "returnUrl": "https://example.com/return",
-  "payerEmailAddress": "test@example.com"
-}'
-```
-
-**Option 2: Using Custom API Key (Override):**
-```bash
-# Pass your own API key as 4th parameter
-./run.sh genericpubsub.KodyPaymentPublisher sandbox request.ecom.v1.InitiatePayment '{
+# API key is now mandatory as 5th parameter
+./run.sh samples.KodyPaymentPublisher sandbox request.ecom.v1.InitiatePayment '{
   "storeId": "your-store-id",
   "paymentReference": "pay_123456",
   "amountMinorUnits": 1000,
@@ -357,26 +559,6 @@ The publisher supports two modes for API key handling:
 
 ### JSON Payload Requirements
 **Important:** The `storeId` field is required in all payment request payloads.
-
-## 🚀 Recent Improvements
-
-### ✅ Latest Updates (August 2025)
-- **🔧 Dependency Fixes** - Resolved gRPC `NoClassDefFoundError` and logback `ThrowableProxy` issues for stable runtime
-- **📦 Updated Dependencies** - Upgraded to logback 1.4.14 and added missing grpc-core dependency
-- **🧹 Cleaned Dependencies** - Removed redundant dependencies and unified protobuf versions for consistency
-- **✅ Runtime Stability** - Eliminated all ClassNotFoundException and dependency conflicts
-- **🔧 Thread-Safe Concurrent Requests** - Fixed race conditions in KodyPaymentPublisher to support multiple simultaneous requests
-- **📝 Clear Method Names** - All APIs now use full method names (e.g., `request.ecom.v1.InitiatePayment`) for better clarity
-- **📁 Simplified Configuration** - Unified configuration management using only `config/` directory
-- **🐳 Docker Integration Verified** - Complete end-to-end testing with containerized deployment
-- **📚 Updated Documentation** - All examples and test cases reflect the new method naming
-
-### 🎯 Production-Ready Features
-- **🚀 Zero Runtime Errors** - All dependency conflicts resolved, no more ClassNotFoundException or missing dependencies
-- **Concurrent Processing** - Multiple payment requests can be processed simultaneously without interference
-- **Robust Error Handling** - Comprehensive error handling with proper correlation tracking
-- **Real-Time Processing** - Sub-second response times for payment operations
-- **Container Support** - Full Docker support with proper volume mounting and networking
 
 ## 🐳 Docker Deployment
 

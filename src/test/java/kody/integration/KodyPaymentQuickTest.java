@@ -1,8 +1,9 @@
-package genericpubsub;
+package kody.integration;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import utility.ApplicationConfig;
+import samples.KodyPaymentPublisher;
 
 import java.util.UUID;
 
@@ -37,7 +38,7 @@ public class KodyPaymentQuickTest {
 
         logger.info("🧪 Quick Test - {} API on {} environment", api, environment);
 
-        KodyPaymentSubscriber subscriber = null;
+        KodyPaymentService subscriber = null;
         KodyPaymentPublisher publisher = null;
         Thread subscriberThread = null;
 
@@ -47,8 +48,8 @@ public class KodyPaymentQuickTest {
             ApplicationConfig config = new ApplicationConfig("arguments-" + environment + ".yaml");
 
             // Start subscriber
-            subscriber = new KodyPaymentSubscriber(config);
-            final KodyPaymentSubscriber finalSubscriber = subscriber;
+            subscriber = new KodyPaymentService(config);
+            final KodyPaymentService finalSubscriber = subscriber;
             subscriberThread = new Thread(() -> {
                 try {
                     finalSubscriber.subscribeAndProcessPayments();
@@ -145,8 +146,8 @@ public class KodyPaymentQuickTest {
                     "}";
 
             logger.info("📤 Sending request...");
-            KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponse(
-                    correlationId, method, payload, 45);
+            KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponseWithCustomApiKey(
+                    correlationId, method, payload, config.getKodyApiKey(), 45);
 
             if (response != null) {
                 logger.info("📦 Response received:");
@@ -177,8 +178,8 @@ public class KodyPaymentQuickTest {
                     "}";
 
             logger.info("📤 Sending request...");
-            KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponse(
-                    correlationId, method, payload, 45);
+            KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponseWithCustomApiKey(
+                    correlationId, method, payload, config.getKodyApiKey(), 45);
 
             if (response != null) {
                 logger.info("📦 Response received:");
@@ -212,8 +213,8 @@ public class KodyPaymentQuickTest {
                     "}";
 
             logger.info("📤 Sending request...");
-            KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponse(
-                    correlationId, method, payload, 45);
+            KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponseWithCustomApiKey(
+                    correlationId, method, payload, config.getKodyApiKey(), 45);
 
             if (response != null) {
                 logger.info("📦 Response received:");
@@ -245,8 +246,8 @@ public class KodyPaymentQuickTest {
                     "}";
 
             logger.info("📤 Sending request...");
-            KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponse(
-                    correlationId, method, payload, 45);
+            KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponseWithCustomApiKey(
+                    correlationId, method, payload, config.getKodyApiKey(), 45);
 
             if (response != null) {
                 logger.info("📦 Response received:");
@@ -285,8 +286,8 @@ public class KodyPaymentQuickTest {
                     "}";
 
             logger.info("📤 Sending InitiatePayment request...");
-            KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponse(
-                    correlationId, method, payload, 45);
+            KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponseWithCustomApiKey(
+                    correlationId, method, payload, config.getKodyApiKey(), 45);
 
             if (response != null && response.getPayload() != null) {
                 String paymentId = extractPaymentIdFromResponse(response.getPayload());

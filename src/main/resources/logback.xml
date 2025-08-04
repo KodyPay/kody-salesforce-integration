@@ -22,8 +22,9 @@
     <logger name="com.google" level="ERROR"/>
 
     <!-- Keep our application loggers at INFO for important events -->
-    <logger name="genericpubsub.KodyPaymentPublisher" level="INFO"/>
-    <logger name="genericpubsub.KodyPaymentSubscriber" level="DEBUG"/>
+    <logger name="samples.KodyPaymentPublisher" level="INFO"/>
+    <logger name="kody.integration.KodyPaymentService" level="DEBUG"/>
+    <logger name="kody.integration" level="INFO"/>
     <logger name="utility.CommonContext" level="WARN"/>
 
 </configuration>

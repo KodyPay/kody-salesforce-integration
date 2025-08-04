@@ -1,4 +1,4 @@
-package genericpubsub;
+package samples;
 
 import java.io.IOException;
 
@@ -48,12 +48,12 @@ public class GetSchema extends CommonContext {
     }
 
     public static void main(String[] args) throws IOException {
-        ApplicationConfig exampleConfigurations = new ApplicationConfig("arguments-" + args[1] + ".yaml");
+        ApplicationConfig config = new ApplicationConfig("arguments-" + args[1] + ".yaml");
 
         // Using the try-with-resource statement. The CommonContext class implements AutoCloseable in
         // order to close the resources used.
-        try (GetSchema example = new GetSchema(exampleConfigurations)) {
-            example.getSchema(exampleConfigurations.getTopic());
+        try (GetSchema example = new GetSchema(config)) {
+            example.getSchema(config.getTopic());
         } catch (Exception e) {
             printStatusRuntimeException("Getting schema", e);
         }

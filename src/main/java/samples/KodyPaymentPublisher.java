@@ -1,4 +1,4 @@
-package genericpubsub;
+package samples;
 
 import com.google.common.collect.Lists;
 import com.google.protobuf.ByteString;
@@ -66,11 +66,11 @@ public class KodyPaymentPublisher extends CommonContext {
         }
     }
 
-    public KodyPaymentPublisher(ApplicationConfig exampleConfigurations) {
-        super(exampleConfigurations);
+    public KodyPaymentPublisher(ApplicationConfig config) {
+        super(config);
         
         // Read Kody API key from configuration for proxy usage
-        this.kodyApiKey = exampleConfigurations.getKodyApiKey();
+        this.kodyApiKey = config.getKodyApiKey();
 
         String publishTopic = "/event/KodyPayment__e";
         setupTopicDetails(publishTopic, true, true);
@@ -419,9 +419,9 @@ public class KodyPaymentPublisher extends CommonContext {
         logger.info("🔑 Using API key: {}***", customApiKey.substring(0, Math.min(8, customApiKey.length())));
 
         try {
-            ApplicationConfig exampleConfigurations = new ApplicationConfig("arguments-" + environment + ".yaml");
+            ApplicationConfig config = new ApplicationConfig("arguments-" + environment + ".yaml");
 
-            KodyPaymentPublisher publisher = new KodyPaymentPublisher(exampleConfigurations);
+            KodyPaymentPublisher publisher = new KodyPaymentPublisher(config);
             logger.info("✅ Publisher initialized with response subscription");
 
             String correlationId = UUID.randomUUID().toString();

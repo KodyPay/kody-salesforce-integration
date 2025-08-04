@@ -60,4 +60,4 @@ EXPOSE 8080
 ENTRYPOINT ["dumb-init", "--"]
 
 # Default command - can be overridden
-CMD ["sh", "-c", "java $JAVA_OPTS -cp app.jar genericpubsub.KodyPaymentSubscriber $KODY_ENV"]
+CMD ["sh", "-c", "java $JAVA_OPTS -cp app.jar kody.integration.KodyPaymentService $KODY_ENV"]

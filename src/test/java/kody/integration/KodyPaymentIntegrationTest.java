@@ -1,9 +1,10 @@
-package genericpubsub;
+package kody.integration;
 
 import org.junit.jupiter.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import utility.ApplicationConfig;
+import samples.KodyPaymentPublisher;
 
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -20,7 +21,7 @@ import java.util.concurrent.TimeUnit;
 public class KodyPaymentIntegrationTest {
     private static final Logger logger = LoggerFactory.getLogger(KodyPaymentIntegrationTest.class);
 
-    private static KodyPaymentSubscriber subscriber;
+    private static KodyPaymentService subscriber;
     private static KodyPaymentPublisher publisher;
     private static Thread subscriberThread;
     private static ApplicationConfig config;
@@ -36,7 +37,7 @@ public class KodyPaymentIntegrationTest {
         config = new ApplicationConfig("arguments-sandbox.yaml");
 
         // Start subscriber in background thread
-        subscriber = new KodyPaymentSubscriber(config);
+        subscriber = new KodyPaymentService(config);
         subscriberThread = new Thread(() -> {
             try {
                 subscriber.subscribeAndProcessPayments();
@@ -93,8 +94,8 @@ public class KodyPaymentIntegrationTest {
                 "  \"payerEmailAddress\": \"test@example.com\"\n" +
                 "}";
 
-        KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponse(
-                correlationId, method, payload, 30);
+        KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponseWithCustomApiKey(
+                correlationId, method, payload, config.getKodyApiKey(), 30);
 
         Assertions.assertNotNull(response, "Response should not be null");
         Assertions.assertEquals(correlationId, response.getCorrelationId(), "Correlation ID should match");
@@ -118,8 +119,8 @@ public class KodyPaymentIntegrationTest {
                 "  \"paymentId\": \"" + testPaymentId + "\"\n" +
                 "}";
 
-        KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponse(
-                correlationId, method, payload, 30);
+        KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponseWithCustomApiKey(
+                correlationId, method, payload, config.getKodyApiKey(), 30);
 
         Assertions.assertNotNull(response, "Response should not be null");
         Assertions.assertEquals(correlationId, response.getCorrelationId(), "Correlation ID should match");
@@ -146,8 +147,8 @@ public class KodyPaymentIntegrationTest {
                 "  }\n" +
                 "}";
 
-        KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponse(
-                correlationId, method, payload, 30);
+        KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponseWithCustomApiKey(
+                correlationId, method, payload, config.getKodyApiKey(), 30);
 
         Assertions.assertNotNull(response, "Response should not be null");
         Assertions.assertEquals(correlationId, response.getCorrelationId(), "Correlation ID should match");
@@ -172,8 +173,8 @@ public class KodyPaymentIntegrationTest {
                 "  \"amount\": \"10.00\"\n" +
                 "}";
 
-        KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponse(
-                correlationId, method, payload, 30);
+        KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponseWithCustomApiKey(
+                correlationId, method, payload, config.getKodyApiKey(), 30);
 
         Assertions.assertNotNull(response, "Response should not be null");
         Assertions.assertEquals(correlationId, response.getCorrelationId(), "Correlation ID should match");
@@ -194,8 +195,8 @@ public class KodyPaymentIntegrationTest {
         String method = "request.ecom.v1.InvalidMethod";
         String payload = "{}";
 
-        KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponse(
-                correlationId, method, payload, 30);
+        KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponseWithCustomApiKey(
+                correlationId, method, payload, config.getKodyApiKey(), 30);
 
         Assertions.assertNotNull(response, "Response should not be null");
         Assertions.assertEquals(correlationId, response.getCorrelationId(), "Correlation ID should match");
@@ -231,8 +232,8 @@ public class KodyPaymentIntegrationTest {
                             "  }\n" +
                             "}";
 
-                    KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponse(
-                            correlationId, method, payload, 30);
+                    KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponseWithCustomApiKey(
+                            correlationId, method, payload, config.getKodyApiKey(), 30);
 
                     results[index] = response != null && response.getCorrelationId().equals(correlationId);
                     logger.info("✅ Concurrent request {} completed: {}", index + 1, results[index]);

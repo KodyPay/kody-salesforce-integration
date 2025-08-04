@@ -1,8 +1,9 @@
-package genericpubsub;
+package kody.integration;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import utility.ApplicationConfig;
+import samples.KodyPaymentPublisher;
 
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -18,7 +19,7 @@ public class KodyPaymentManualTest {
     private static final Logger logger = LoggerFactory.getLogger(KodyPaymentManualTest.class);
 
     private static String actualPaymentId = null; // Will be captured from InitiatePayment response
-    private static KodyPaymentSubscriber subscriber;
+    private static KodyPaymentService subscriber;
     private static KodyPaymentPublisher publisher; 
     private static Thread subscriberThread;
 
@@ -36,49 +37,76 @@ public class KodyPaymentManualTest {
             // Setup
             setupTest(environment);
 
-            // Run all tests in sequence
-            boolean allTestsPassed = true;
-
+            // Run all tests in sequence - FAIL FAST on first error
+            
             // Test 1: InitiatePayment - captures payment ID for later tests
-            allTestsPassed &= testInitiatePayment();
+            if (!testInitiatePayment()) {
+                logger.error("❌ FAST FAIL: InitiatePayment test failed! Stopping execution.");
+                System.exit(1);
+            }
+            logger.info("✅ Test 1 passed, continuing...\n");
 
             // Test 2: PaymentDetails - uses payment ID from Test 1
             if (actualPaymentId != null) {
-                allTestsPassed &= testPaymentDetails();
+                if (!testPaymentDetails()) {
+                    logger.error("❌ FAST FAIL: PaymentDetails test failed! Stopping execution.");
+                    System.exit(1);
+                }
+                logger.info("✅ Test 2 passed, continuing...\n");
             } else {
-                logger.warn("⚠️ Skipping PaymentDetails test - no payment ID captured from InitiatePayment");
-                allTestsPassed = false;
+                logger.error("❌ FAST FAIL: No payment ID captured from InitiatePayment! Stopping execution.");
+                System.exit(1);
             }
 
             // Test 3: GetPayments - independent test
-            allTestsPassed &= testGetPayments();
+            if (!testGetPayments()) {
+                logger.error("❌ FAST FAIL: GetPayments test failed! Stopping execution.");
+                System.exit(1);
+            }
+            logger.info("✅ Test 3 passed, continuing...\n");
 
             // Test 4: Refund - uses payment ID from Test 1
             if (actualPaymentId != null) {
-                allTestsPassed &= testRefund();
+                if (!testRefund()) {
+                    logger.error("❌ FAST FAIL: Refund test failed! Stopping execution.");
+                    System.exit(1);
+                }
+                logger.info("✅ Test 4 passed, continuing...\n");
             } else {
-                logger.warn("⚠️ Skipping Refund test - no payment ID captured from InitiatePayment");
-                allTestsPassed = false;
+                logger.error("❌ FAST FAIL: No payment ID available for Refund test! Stopping execution.");
+                System.exit(1);
             }
-            allTestsPassed &= testErrorHandling();
-            allTestsPassed &= testConcurrentRequests();
+            
+            // Test 5: Error Handling
+            if (!testErrorHandling()) {
+                logger.error("❌ FAST FAIL: Error handling test failed! Stopping execution.");
+                System.exit(1);
+            }
+            logger.info("✅ Test 5 passed, continuing...\n");
+            
+            // Test 6: Concurrent Requests
+            if (!testConcurrentRequests()) {
+                logger.error("❌ FAST FAIL: Concurrent requests test failed! Stopping execution.");
+                System.exit(1);
+            }
+            logger.info("✅ Test 6 passed!\n");
 
-            // Results
-            if (allTestsPassed) {
-                logger.info("🎉 ALL TESTS PASSED! ✅");
-                logger.info("📊 Test Summary:");
-                logger.info("  ✅ InitiatePayment API - Working");
-                logger.info("  ✅ PaymentDetails API - Working");
-                logger.info("  ✅ GetPayments API - Working");
-                logger.info("  ✅ Refund API - Working");
-                logger.info("  ✅ Error Handling - Working");
-                logger.info("  ✅ Concurrent Requests - Working");
-            } else {
-                logger.error("❌ SOME TESTS FAILED! See logs above for details.");
-            }
+            // All tests passed if we reach here (fail-fast would have returned earlier)
+            logger.info("🎉 ALL TESTS PASSED! ✅");
+            logger.info("📊 Test Summary:");
+            logger.info("  ✅ InitiatePayment API - Working");
+            logger.info("  ✅ PaymentDetails API - Working");  
+            logger.info("  ✅ GetPayments API - Working");
+            logger.info("  ✅ Refund API - Working");
+            logger.info("  ✅ Error Handling - Working");
+            logger.info("  ✅ Concurrent Requests - Working");
+            
+            // Exit with success code
+            System.exit(0);
 
         } catch (Exception e) {
             logger.error("❌ Test execution failed", e);
+            System.exit(1);
         } finally {
             cleanup();
         }
@@ -103,7 +131,7 @@ public class KodyPaymentManualTest {
         logger.info("  🔑 API Key configured: Yes");
 
         // Start subscriber in background
-        subscriber = new KodyPaymentSubscriber(config);
+        subscriber = new KodyPaymentService(config);
         subscriberThread = new Thread(() -> {
             try {
                 subscriber.subscribeAndProcessPayments();
@@ -140,8 +168,8 @@ public class KodyPaymentManualTest {
                     "  \"payerEmailAddress\": \"test@example.com\"\n" +
                     "}";
 
-            KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponse(
-                    correlationId, method, payload, 30);
+            KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponseWithCustomApiKey(
+                    correlationId, method, payload, config.getKodyApiKey(), 30);
 
             if (response != null && 
                 correlationId.equals(response.getCorrelationId()) &&
@@ -177,8 +205,8 @@ public class KodyPaymentManualTest {
                     "  \"paymentId\": \"" + actualPaymentId + "\"\n" +
                     "}";
 
-            KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponse(
-                    correlationId, method, payload, 30);
+            KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponseWithCustomApiKey(
+                    correlationId, method, payload, config.getKodyApiKey(), 30);
 
             if (response != null && 
                 correlationId.equals(response.getCorrelationId()) &&
@@ -213,8 +241,8 @@ public class KodyPaymentManualTest {
                     "  }\n" +
                     "}";
 
-            KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponse(
-                    correlationId, method, payload, 30);
+            KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponseWithCustomApiKey(
+                    correlationId, method, payload, config.getKodyApiKey(), 30);
 
             if (response != null && 
                 correlationId.equals(response.getCorrelationId()) &&
@@ -247,8 +275,8 @@ public class KodyPaymentManualTest {
                     "  \"amount\": \"10.00\"\n" +
                     "}";
 
-            KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponse(
-                    correlationId, method, payload, 30);
+            KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponseWithCustomApiKey(
+                    correlationId, method, payload, config.getKodyApiKey(), 30);
 
             if (response != null && 
                 correlationId.equals(response.getCorrelationId()) &&
@@ -276,8 +304,9 @@ public class KodyPaymentManualTest {
             String method = "request.ecom.v1.InvalidMethod";
             String payload = "{}";
 
-            KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponse(
-                    correlationId, method, payload, 30);
+            ApplicationConfig config = new ApplicationConfig("arguments-sandbox.yaml");
+            KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponseWithCustomApiKey(
+                    correlationId, method, payload, config.getKodyApiKey(), 30);
 
             if (response != null && 
                 correlationId.equals(response.getCorrelationId()) &&
@@ -321,8 +350,8 @@ public class KodyPaymentManualTest {
                                 "  }\n" +
                                 "}";
 
-                        KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponse(
-                                correlationId, method, payload, 30);
+                        KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponseWithCustomApiKey(
+                                correlationId, method, payload, config.getKodyApiKey(), 30);
 
                         results[index] = response != null && response.getCorrelationId().equals(correlationId);
                         logger.info("✅ Concurrent request {} completed: {}", index + 1, results[index]);

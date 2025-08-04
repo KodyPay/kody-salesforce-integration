@@ -43,13 +43,23 @@ echo "✅ Build successful"
 echo ""
 echo "🧪 Starting Kody Payment Integration Test..."
 echo "   This will test all APIs: InitiatePayment, PaymentDetails, GetPayments, Refund"
+echo "   🚨 FAIL-FAST mode: Test execution stops immediately on first failure"
 echo "   Please wait, this may take up to 2-3 minutes..."
 echo ""
 
-mvn exec:java -Dexec.mainClass="genericpubsub.KodyPaymentManualTest" -Dexec.classpathScope="test" -Dexec.args="$ENVIRONMENT" -q
+mvn exec:java -Dexec.mainClass="kody.integration.KodyPaymentManualTest" -Dexec.classpathScope="test" -Dexec.args="$ENVIRONMENT" -q
 
+TEST_EXIT_CODE=$?
 echo ""
-echo "🏁 Test execution completed!"
+
+if [ $TEST_EXIT_CODE -eq 0 ]; then
+    echo "🏁 Test execution completed successfully! ✅"
+    echo "🎉 ALL INTEGRATION TESTS PASSED!"
+else
+    echo "🏁 Test execution failed! ❌"
+    echo "💥 AT LEAST ONE TEST FAILED - Check logs above for details"
+    echo "Exit code: $TEST_EXIT_CODE"
+fi
 echo ""
 echo "📋 Test Coverage:"
 echo "  • InitiatePayment API - Creates payment requests"
@@ -61,3 +71,6 @@ echo "  • Concurrent Requests - Tests multiple simultaneous requests"
 echo ""
 echo "💡 Note: API errors like 'PERMISSION_DENIED' or 'INVALID_ARGUMENT'"
 echo "   are expected with demo credentials and confirm the integration is working."
+
+# Exit with the same code as the test
+exit $TEST_EXIT_CODE
