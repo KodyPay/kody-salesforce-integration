@@ -1,5 +1,5 @@
 # Multi-stage build for production-ready Kody-Salesforce Integration
-FROM maven:3.9.4-eclipse-temurin-11 AS builder
+FROM maven:3.9.4-eclipse-temurin-21 AS builder
 
 # Set working directory
 WORKDIR /app
@@ -11,8 +11,7 @@ COPY src/main/proto/ src/main/proto/
 # Download dependencies (cached layer if pom.xml hasn't changed)
 RUN mvn dependency:go-offline -B
 
-# Copy source code (bust cache if needed by adding timestamp comment)
-# Last updated: 2025-08-04 11:30
+# Copy source code
 COPY src/ src/
 
 # Force clean build - remove any cached build artifacts
@@ -22,7 +21,7 @@ RUN rm -rf ~/.m2/repository/org/example/pubsub-java
 RUN mvn clean package -DskipTests -B
 
 # Production runtime image
-FROM eclipse-temurin:11-jre
+FROM eclipse-temurin:21-jre
 
 # Install dumb-init for proper signal handling (Ubuntu-based image)
 RUN apt-get update && apt-get install -y --no-install-recommends dumb-init && \

@@ -271,6 +271,21 @@ The store ID is now configurable, so you can use your own credentials:
 
 Note: You don't need to specify `storeId` in the JSON payload - it's automatically loaded from your configuration.
 
+## 🚀 Recent Improvements
+
+### ✅ Latest Updates
+- **🔧 Thread-Safe Concurrent Requests** - Fixed race conditions in KodyPaymentPublisher to support multiple simultaneous requests
+- **📝 Clear Method Names** - All APIs now use full method names (e.g., `request.ecom.v1.InitiatePayment`) for better clarity
+- **📁 Simplified Configuration** - Unified configuration management using only `config/` directory
+- **🐳 Docker Integration Verified** - Complete end-to-end testing with containerized deployment
+- **📚 Updated Documentation** - All examples and test cases reflect the new method naming
+
+### 🎯 Production-Ready Features
+- **Concurrent Processing** - Multiple payment requests can be processed simultaneously without interference
+- **Robust Error Handling** - Comprehensive error handling with proper correlation tracking
+- **Real-Time Processing** - Sub-second response times for payment operations
+- **Container Support** - Full Docker support with proper volume mounting and networking
+
 ## 🐳 Docker Deployment
 
 ### Quick Start with Docker
