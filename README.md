@@ -57,13 +57,14 @@ Navigate to **Setup** → **Platform Events** and create a new Platform Event wi
 
 ### 2. Add Custom Fields
 
-Add these **three custom fields** to your KodyPayment Platform Event:
+Add these **four custom fields** to your KodyPayment Platform Event:
 
 | Field Label | API Name | Data Type | Length |
 |-------------|----------|-----------|---------|
 | `correlation_id` | `correlation_id__c` | Text | 255 |
 | `method` | `method__c` | Text | 255 |
 | `payload` | `payload__c` | Long Text Area | 131072 |
+| `api_key` | `api_key__c` | Text | 255 |
 
 **Step-by-step field creation:**
 1. Click **New** in the Custom Fields & Relationships section
@@ -110,7 +111,8 @@ You can test the Platform Event in Salesforce using Anonymous Apex:
 KodyPayment__e testEvent = new KodyPayment__e(
     correlation_id__c = 'test-123',
     method__c = 'request.ecom.v1.InitiatePayment',
-    payload__c = '{"test": "data"}'
+    payload__c = '{"storeId": "your-store-id", "test": "data"}',
+    api_key__c = 'your-kody-api-key'
 );
 
 EventBus.publish(testEvent);
@@ -121,7 +123,7 @@ System.debug('Test event published');
 
 Your Platform Event setup is complete when:
 - ✅ Platform Event shows **"Deployed"** status
-- ✅ All three custom fields are created and active
+- ✅ All four custom fields are created and active
 - ✅ Integration user has proper permissions
 - ✅ Topic `/event/KodyPayment__e` is accessible
 - ✅ Test event publishing works in Anonymous Apex
@@ -169,13 +171,13 @@ For manual integration testing:
   "orderId": "order_123456",
   "returnUrl": "https://example.com/return",
   "payerEmailAddress": "test@example.com"
-}'
+}' 'your-custom-api-key'
 
 # GetPayments
 ./run.sh genericpubsub.KodyPaymentPublisher sandbox request.ecom.v1.GetPayments '{
   "storeId": "your-store-id",
   "pageCursor": {"page": 1, "pageSize": 10}
-}'
+}' 'your-custom-api-key'
 ```
 
 ## 📋 Supported Kody APIs
@@ -190,17 +192,60 @@ For manual integration testing:
 ### Core Components
 
 - **KodyPaymentPublisher** - Generic command-line publisher that accepts any method and JSON payload
-- **KodyPaymentSubscriber** - Real-time event subscriber that routes requests to Kody API
+- **KodyPaymentSubscriber** - Real-time event subscriber that acts as a stateless proxy to Kody API
 - **ApplicationConfig** - Configuration management for external settings
 - **Test Suite** - Comprehensive testing utilities
 
+### Proxy Architecture
+
+The subscriber implements a **pure proxy pattern** where:
+- All API keys must be provided in the `api_key__c` field of each Platform Event
+- All store IDs must be included in the JSON payload
+- No automatic injection or fallback to configuration values occurs at runtime
+- Configuration values are used only for automation testing
+
 ### Event Flow
 
-1. Publisher sends payment request to Salesforce Pub/Sub topic `/event/KodyPayment__e`
-2. Subscriber receives event in real-time
-3. Subscriber routes request to appropriate Kody API endpoint
-4. API response is published back to Salesforce
-5. Publisher receives correlated response
+```mermaid
+graph TB
+    Client[Client Application] --> Publisher[KodyPaymentPublisher]
+    Publisher --> |1. Publish Event| SF[Salesforce Pub/Sub<br/>/event/KodyPayment__e]
+    
+    SF --> |2. Real-time Event| Subscriber[KodyPaymentSubscriber<br/>Stateless Proxy]
+    
+    Subscriber --> |3. Extract Fields| EventData{Event Fields}
+    EventData --> CorrelationId[correlation_id__c]
+    EventData --> Method[method__c]
+    EventData --> Payload[payload__c<br/>JSON with storeId]
+    EventData --> ApiKey[api_key__c]
+    
+    Subscriber --> |4. Validate| Validation{API Key<br/>Present?}
+    Validation --> |No| Error[Throw Error:<br/>API key required]
+    Validation --> |Yes| KodyAPI[Kody Payment API<br/>grpc-staging-ap.kodypay.com]
+    
+    KodyAPI --> |5. API Response| Subscriber
+    Subscriber --> |6. Publish Response| SF
+    SF --> |7. Correlated Response| Publisher
+    Publisher --> |8. Return Result| Client
+    
+    Config[Configuration YAML<br/>automation testing only] -.-> |Test Values Only| Publisher
+    
+    style Subscriber fill:#e1f5fe
+    style EventData fill:#f3e5f5
+    style KodyAPI fill:#e8f5e8
+    style Config fill:#fff3e0,stroke-dasharray: 5 5
+    style Error fill:#ffebee
+```
+
+**Flow Details:**
+1. **Publisher** sends payment request to Salesforce Pub/Sub topic with all required fields
+2. **Subscriber** receives event in real-time via streaming subscription
+3. **Field Extraction** from Platform Event: correlation_id__c, method__c, payload__c, api_key__c
+4. **Validation** ensures API key is present (pure proxy - no fallback to config)
+5. **Kody API Call** using extracted API key and JSON payload with storeId
+6. **Response Publishing** back to same Salesforce topic with correlation ID
+7. **Correlated Response** received by publisher waiting for specific correlation ID
+8. **Result Return** to client application
 
 ## ⚙️ Configuration
 
@@ -222,7 +267,7 @@ TENANT_ID: your-tenant-id
 # Kody Payment Integration
 KODY_HOSTNAME: grpc-staging-ap.kodypay.com  # Use -ap for Asia, -eu for Europe
 KODY_API_KEY: your-api-key
-KODY_STORE_ID: your-store-id
+KODY_STORE_ID: your-store-id  # Used for automation testing only
 ```
 
 ## 🔧 Project Structure
@@ -252,14 +297,36 @@ When testing with demo credentials, you may see API errors like:
 
 These errors are **expected** and confirm the integration is working - you're successfully reaching the Kody API with test data.
 
+## 🔧 Troubleshooting
+
+### Common Issues
+
+**Q: Getting `NoClassDefFoundError: io.grpc.internal.NoopClientStream`**
+- **Solution**: This has been fixed in the latest version. Run `mvn clean install` to rebuild with updated dependencies.
+
+**Q: Getting `ClassNotFoundException: ch.qos.logback.classic.spi.ThrowableProxy`**
+- **Solution**: This has been resolved by upgrading logback to 1.4.14. Rebuild the project to apply the fix.
+
+**Q: Subscriber crashes with dependency errors**
+- **Solution**: The project now includes all required gRPC dependencies. Clean rebuild should resolve any lingering issues:
+  ```bash
+  mvn clean install
+  ./run.sh genericpubsub.KodyPaymentSubscriber sandbox
+  ```
+
+**Q: Multiple versions of the same library causing conflicts**
+- **Solution**: Dependencies have been cleaned up and unified. All protobuf libraries now use the same version (4.31.0).
+
 ## 📝 Usage Examples
 
-### Using Configuration-Based Store ID
-The store ID is now configurable, so you can use your own credentials:
+### Passing API Keys
+The publisher supports two modes for API key handling:
 
+**Option 1: Using API Key from Configuration (Default):**
 ```bash
-# Your store ID is automatically loaded from configuration
+# Uses KODY_API_KEY from config/arguments-sandbox.yaml
 ./run.sh genericpubsub.KodyPaymentPublisher sandbox request.ecom.v1.InitiatePayment '{
+  "storeId": "your-store-id",
   "paymentReference": "pay_123456",
   "amountMinorUnits": 1000,
   "currency": "GBP",
@@ -269,11 +336,35 @@ The store ID is now configurable, so you can use your own credentials:
 }'
 ```
 
-Note: You don't need to specify `storeId` in the JSON payload - it's automatically loaded from your configuration.
+**Option 2: Using Custom API Key (Override):**
+```bash
+# Pass your own API key as 4th parameter
+./run.sh genericpubsub.KodyPaymentPublisher sandbox request.ecom.v1.InitiatePayment '{
+  "storeId": "your-store-id",
+  "paymentReference": "pay_123456",
+  "amountMinorUnits": 1000,
+  "currency": "GBP",
+  "orderId": "order_123456",
+  "returnUrl": "https://example.com/return",
+  "payerEmailAddress": "test@example.com"
+}' 'your-custom-api-key'
+```
+
+**How It Works:**
+- The API key is sent in the `api_key__c` field of the Platform Event
+- The subscriber extracts this API key and uses it for the Kody API call
+- This enables true proxy mode where each request can use different API keys
+
+### JSON Payload Requirements
+**Important:** The `storeId` field is required in all payment request payloads.
 
 ## 🚀 Recent Improvements
 
-### ✅ Latest Updates
+### ✅ Latest Updates (August 2025)
+- **🔧 Dependency Fixes** - Resolved gRPC `NoClassDefFoundError` and logback `ThrowableProxy` issues for stable runtime
+- **📦 Updated Dependencies** - Upgraded to logback 1.4.14 and added missing grpc-core dependency
+- **🧹 Cleaned Dependencies** - Removed redundant dependencies and unified protobuf versions for consistency
+- **✅ Runtime Stability** - Eliminated all ClassNotFoundException and dependency conflicts
 - **🔧 Thread-Safe Concurrent Requests** - Fixed race conditions in KodyPaymentPublisher to support multiple simultaneous requests
 - **📝 Clear Method Names** - All APIs now use full method names (e.g., `request.ecom.v1.InitiatePayment`) for better clarity
 - **📁 Simplified Configuration** - Unified configuration management using only `config/` directory
@@ -281,6 +372,7 @@ Note: You don't need to specify `storeId` in the JSON payload - it's automatical
 - **📚 Updated Documentation** - All examples and test cases reflect the new method naming
 
 ### 🎯 Production-Ready Features
+- **🚀 Zero Runtime Errors** - All dependency conflicts resolved, no more ClassNotFoundException or missing dependencies
 - **Concurrent Processing** - Multiple payment requests can be processed simultaneously without interference
 - **Robust Error Handling** - Comprehensive error handling with proper correlation tracking
 - **Real-Time Processing** - Sub-second response times for payment operations

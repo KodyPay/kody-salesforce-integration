@@ -38,7 +38,7 @@ public class KodyPaymentPublisher extends CommonContext {
     private static final Logger logger = LoggerFactory.getLogger(KodyPaymentPublisher.class);
     private final int TIMEOUT_SECONDS = 30;
 
-
+    private final String kodyApiKey;
     private final Map<String, CountDownLatch> pendingRequests = new ConcurrentHashMap<>();
     private final Map<String, PaymentResponse> responses = new ConcurrentHashMap<>();
     private volatile boolean responseSubscriberRunning = false;
@@ -68,6 +68,9 @@ public class KodyPaymentPublisher extends CommonContext {
 
     public KodyPaymentPublisher(ApplicationConfig exampleConfigurations) {
         super(exampleConfigurations);
+        
+        // Read Kody API key from configuration for proxy usage
+        this.kodyApiKey = exampleConfigurations.getKodyApiKey();
 
         String publishTopic = "/event/KodyPayment__e";
         setupTopicDetails(publishTopic, true, true);
@@ -84,23 +87,21 @@ public class KodyPaymentPublisher extends CommonContext {
     }
 
     public PaymentResponse sendPaymentRequestAndWaitForResponse(String correlationId, String method, String payload, int timeoutSeconds) throws Exception {
+        return sendPaymentRequestAndWaitForResponseWithCustomApiKey(correlationId, method, payload, this.kodyApiKey, timeoutSeconds);
+    }
+
+    public PaymentResponse sendPaymentRequestAndWaitForResponseWithCustomApiKey(String correlationId, String method, String payload, String apiKey, int timeoutSeconds) throws Exception {
         CountDownLatch responseLatch = new CountDownLatch(1);
         pendingRequests.put(correlationId, responseLatch);
 
         try {
-            logger.info("💳 Sending payment request and waiting for response...");
-            logger.info("🆔 Correlation ID: {}", correlationId);
-            logger.info("🔧 Method: {}", method);
-            logger.info("📦 Request: {}", payload);
+            logger.info("💳 Sending payment request - Correlation: {}, Method: {}, Timeout: {}s", correlationId, method, timeoutSeconds);
 
-            publishPaymentRequest(correlationId, method, payload);
-
-            logger.info("⏳ Waiting for response with correlation ID: {} (timeout: {}s)", correlationId, timeoutSeconds);
+            publishPaymentRequestWithCustomApiKey(correlationId, method, payload, apiKey);
             if (responseLatch.await(timeoutSeconds, TimeUnit.SECONDS)) {
                 PaymentResponse response = responses.remove(correlationId);
                 if (response != null) {
-                    logger.info("✅ Received response for correlation ID: {}", correlationId);
-                    logger.info("📦 Response: {}", response.getPayload());
+                    logger.info("✅ Response received - Correlation: {}", correlationId);
                     return response;
                 } else {
                     throw new RuntimeException("Response received but data was null");
@@ -115,6 +116,10 @@ public class KodyPaymentPublisher extends CommonContext {
     }
 
     public void publishPaymentRequest(String correlationId, String method, String payload) throws Exception {
+        publishPaymentRequestWithCustomApiKey(correlationId, method, payload, this.kodyApiKey);
+    }
+
+    public void publishPaymentRequestWithCustomApiKey(String correlationId, String method, String payload, String apiKey) throws Exception {
         logger.info("📡 Publishing payment request...");
 
         CountDownLatch finishLatch = new CountDownLatch(1);
@@ -128,7 +133,7 @@ public class KodyPaymentPublisher extends CommonContext {
 
         ClientCallStreamObserver<PublishRequest> requestObserver = (ClientCallStreamObserver<PublishRequest>) asyncStub.publishStream(pubObserver);
 
-        PublishRequest publishRequest = generatePaymentPublishRequest(correlationId, method, payload);
+        PublishRequest publishRequest = generatePaymentPublishRequestWithCustomApiKey(correlationId, method, payload, apiKey);
         requestObserver.onNext(publishRequest);
 
         validatePublishResponse(finishLatch, numExpectedPublishResponses, publishResponses, failed, 1);
@@ -240,16 +245,13 @@ public class KodyPaymentPublisher extends CommonContext {
             String method = extractFieldAsString(record, "method__c");
             String payload = extractFieldAsString(record, "payload__c");
 
-            logger.info("🎯 Event - Correlation: {}, Method: {}", correlationId, method);
-            logger.info("📦 Payload: {}", payload);
-
             boolean isPendingRequest = pendingRequests.containsKey(correlationId);
             boolean isResponseMethod = method != null && method.startsWith("response.");
 
             logger.info("🔍 isPending: {}, isResponse: {}", isPendingRequest, isResponseMethod);
 
             if (isPendingRequest && isResponseMethod) {
-                logger.info("🎉 FOUND MATCHING RESPONSE! Correlation ID: {}", correlationId);
+                logger.info("🎉 Found matching response - Correlation: {}", correlationId);
 
                 PaymentResponse response = new PaymentResponse(correlationId, method, payload);
                 responses.put(correlationId, response);
@@ -257,7 +259,6 @@ public class KodyPaymentPublisher extends CommonContext {
                 CountDownLatch latch = pendingRequests.get(correlationId);
                 if (latch != null) {
                     latch.countDown();
-                    logger.info("✅ Notified waiting thread for response: {}", correlationId);
                 }
             } else {
                 logger.info("ℹ️ Ignoring event - isPending: {}, isResponse: {}", isPendingRequest, isResponseMethod);
@@ -278,10 +279,14 @@ public class KodyPaymentPublisher extends CommonContext {
     }
 
     private PublishRequest generatePaymentPublishRequest(String correlationId, String method, String payload) throws IOException {
+        return generatePaymentPublishRequestWithCustomApiKey(correlationId, method, payload, this.kodyApiKey);
+    }
+
+    private PublishRequest generatePaymentPublishRequestWithCustomApiKey(String correlationId, String method, String payload, String apiKey) throws IOException {
         setupTopicDetails("/event/KodyPayment__e", true, true);
 
         Schema schema = new Schema.Parser().parse(schemaInfo.getSchemaJson());
-        GenericRecord event = createPaymentRequestEvent(schema, correlationId, method, payload);
+        GenericRecord event = createPaymentRequestEvent(schema, correlationId, method, payload, apiKey);
 
         GenericDatumWriter<GenericRecord> writer = new GenericDatumWriter<>(event.getSchema());
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
@@ -299,7 +304,7 @@ public class KodyPaymentPublisher extends CommonContext {
                 .build();
     }
 
-    public GenericRecord createPaymentRequestEvent(Schema schema, String correlationId, String method, String payload) {
+    public GenericRecord createPaymentRequestEvent(Schema schema, String correlationId, String method, String payload, String apiKey) {
         GenericRecordBuilder builder = new GenericRecordBuilder(schema);
 
         setFieldIfExists(builder, schema, "CreatedDate", System.currentTimeMillis());
@@ -307,6 +312,7 @@ public class KodyPaymentPublisher extends CommonContext {
         setFieldIfExists(builder, schema, "correlation_id__c", correlationId);
         setFieldIfExists(builder, schema, "method__c", method);
         setFieldIfExists(builder, schema, "payload__c", payload);
+        setFieldIfExists(builder, schema, "api_key__c", apiKey);
 
         logger.info("📝 Created payment request event - Correlation: {}", correlationId);
         return builder.build();
@@ -396,21 +402,21 @@ public class KodyPaymentPublisher extends CommonContext {
     }
 
     public static void main(String[] args) {
-        if (args.length < 4) {
-            logger.error("❌ Usage: ./run.sh genericpubsub.KodyPaymentPublisher <environment> <method> '<json_payload>'");
+        if (args.length < 5) {
+            logger.error("❌ Usage: ./run.sh genericpubsub.KodyPaymentPublisher <environment> <method> '<json_payload>' <api_key>");
             logger.error("   Examples:");
-            logger.error("     ./run.sh genericpubsub.KodyPaymentPublisher sandbox request.ecom.v1.InitiatePayment '{\"storeId\":\"123\",\"amount\":1000}'");
-            logger.error("     ./run.sh genericpubsub.KodyPaymentPublisher sandbox request.ecom.v1.PaymentDetails '{\"storeId\":\"123\",\"paymentId\":\"pay123\"}'");
-            logger.error("     ./run.sh genericpubsub.KodyPaymentPublisher sandbox request.ecom.v1.GetPayments '{\"storeId\":\"123\"}'");
-            logger.error("     ./run.sh genericpubsub.KodyPaymentPublisher sandbox request.ecom.v1.Refund '{\"storeId\":\"123\",\"paymentId\":\"pay123\",\"amount\":\"10.00\"}'");
+            logger.error("     # Pure proxy mode - API key required");
+            logger.error("     ./run.sh genericpubsub.KodyPaymentPublisher sandbox request.ecom.v1.InitiatePayment '{\"storeId\":\"123\",\"amount\":1000}' 'your-api-key'");
             return;
         }
 
         String environment = args[1];
         String method = args[2];
         String payload = args[3];
+        String customApiKey = args[4];
 
         logger.info("🚀 Starting Kody Payment Publisher for environment: {} with method: {}", environment, method);
+        logger.info("🔑 Using API key: {}***", customApiKey.substring(0, Math.min(8, customApiKey.length())));
 
         try {
             ApplicationConfig exampleConfigurations = new ApplicationConfig("arguments-" + environment + ".yaml");
@@ -419,19 +425,23 @@ public class KodyPaymentPublisher extends CommonContext {
             logger.info("✅ Publisher initialized with response subscription");
 
             String correlationId = UUID.randomUUID().toString();
-
-            logger.info("🆔 Correlation ID: {}", correlationId);
-            logger.info("🔧 Request Method: {}", method);
-            logger.info("📦 Request Payload: {}", payload);
+            logger.info("🚀 Sending request - Correlation: {}, Method: {}", correlationId, method);
 
             try {
-                PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponse(
-                        correlationId, method, payload, 60);
+                PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponseWithCustomApiKey(
+                        correlationId, method, payload, customApiKey, 60);
 
-                logger.info("🎉 KODY PAYMENT SUCCESS!");
-                logger.info("🆔 Response Correlation ID: {}", response.getCorrelationId());
-                logger.info("🔧 Response Method: {}", response.getMethod());
-                logger.info("📦 Response Payload: {}", response.getPayload());
+                // Check if response contains an error
+                boolean hasError = response.getPayload() != null && 
+                                 response.getPayload().toLowerCase().contains("error");
+                
+                if (hasError) {
+                    logger.warn("⚠️ KODY API RETURNED ERROR!");
+                } else {
+                    logger.info("🎉 KODY PAYMENT SUCCESS!");
+                }
+                
+                logger.info("📦 Response: {}", response.getPayload());
 
             } catch (Exception e) {
                 logger.error("❌ KODY PAYMENT FAILED: {}", e.getMessage());

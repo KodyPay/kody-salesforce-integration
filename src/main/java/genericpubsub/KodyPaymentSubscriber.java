@@ -15,7 +15,6 @@ import com.kodypay.grpc.ecom.v1.RefundRequest;
 import com.kodypay.grpc.ecom.v1.RefundResponse;
 import com.salesforce.eventbus.protobuf.*;
 import io.grpc.*;
-import io.grpc.stub.ClientCallStreamObserver;
 import io.grpc.stub.MetadataUtils;
 import io.grpc.stub.StreamObserver;
 import org.apache.avro.Schema;
@@ -47,7 +46,6 @@ public class KodyPaymentSubscriber extends CommonContext {
     private final ReplayPreset replayPreset;
     private final ByteString customReplayId;
     private final String kodyHostname;
-    private final String kodyApiKey;
 
     private StreamObserver<FetchRequest> subscribeStream;
     private StreamObserver<PublishRequest> publishStream;
@@ -57,14 +55,10 @@ public class KodyPaymentSubscriber extends CommonContext {
 
         // Read Kody config from YAML
         this.kodyHostname = exampleConfigurations.getKodyHostname();
-        this.kodyApiKey = exampleConfigurations.getKodyApiKey();
-        
+
         // Validate Kody configuration
         if (this.kodyHostname == null || this.kodyHostname.isEmpty()) {
             throw new IllegalArgumentException("KODY_HOSTNAME is required in configuration");
-        }
-        if (this.kodyApiKey == null || this.kodyApiKey.isEmpty()) {
-            throw new IllegalArgumentException("KODY_API_KEY is required in configuration");
         }
 
         String topic = "/event/KodyPayment__e";
@@ -212,6 +206,7 @@ public class KodyPaymentSubscriber extends CommonContext {
             String correlationId = safeGetString(record, "correlation_id__c");
             String method = safeGetString(record, "method__c");
             String payload = safeGetString(record, "payload__c");
+            String apiKey = safeGetString(record, "api_key__c");
 
             logger.info("🔧 Event - Correlation: {}, Method: {}", correlationId, method);
 
@@ -221,36 +216,43 @@ public class KodyPaymentSubscriber extends CommonContext {
             }
 
             logger.info("💳 Processing request: {}", method);
-            processKodyPaymentRequest(correlationId, method, payload);
+            processKodyPaymentRequest(correlationId, method, payload, apiKey);
 
         } catch (Exception e) {
             logger.error("❌ Error processing event", e);
         }
     }
 
-    private void processKodyPaymentRequest(String correlationId, String method, String payload) {
+    private void processKodyPaymentRequest(String correlationId, String method, String payload, String apiKey) {
         try {
+            // API key must be provided in the event (proxy pattern)
+            if (apiKey == null || apiKey.isEmpty()) {
+                throw new IllegalArgumentException("API key is required in event payload");
+            }
+            
+            logger.info("🔑 Using API key: {}***", apiKey.substring(0, Math.min(8, apiKey.length())));
+            
             JsonNode payloadJson = objectMapper.readTree(payload);
 
             String responseJson;
             switch (method) {
                 case "request.ecom.v1.InitiatePayment":
-                    responseJson = handleInitiatePayment(payloadJson);
+                    responseJson = handleInitiatePayment(payloadJson, apiKey);
                     publishResponse(correlationId, "response.ecom.v1.InitiatePayment", responseJson);
                     break;
 
                 case "request.ecom.v1.PaymentDetails":
-                    responseJson = handlePaymentDetails(payloadJson);
+                    responseJson = handlePaymentDetails(payloadJson, apiKey);
                     publishResponse(correlationId, "response.ecom.v1.PaymentDetails", responseJson);
                     break;
 
                 case "request.ecom.v1.GetPayments":
-                    responseJson = handleGetPayments(payloadJson);
+                    responseJson = handleGetPayments(payloadJson, apiKey);
                     publishResponse(correlationId, "response.ecom.v1.GetPayments", responseJson);
                     break;
 
                 case "request.ecom.v1.Refund":
-                    responseJson = handleRefund(payloadJson);
+                    responseJson = handleRefund(payloadJson, apiKey);
                     publishResponse(correlationId, "response.ecom.v1.Refund", responseJson);
                     break;
 
@@ -265,42 +267,42 @@ public class KodyPaymentSubscriber extends CommonContext {
         }
     }
 
-    private String handleInitiatePayment(JsonNode payloadJson) throws Exception {
+    private String handleInitiatePayment(JsonNode payloadJson, String apiKey) throws Exception {
         logger.info("📦 Request: {}", payloadJson.toString());
 
         PaymentInitiationRequest.Builder requestBuilder = PaymentInitiationRequest.newBuilder();
         JsonFormat.parser().ignoringUnknownFields().merge(payloadJson.toString(), requestBuilder);
         PaymentInitiationRequest request = requestBuilder.build();
 
-        PaymentInitiationResponse response = callKodyInitiatePayment(request);
+        PaymentInitiationResponse response = callKodyInitiatePayment(request, apiKey);
 
         String responseJson = JsonFormat.printer().omittingInsignificantWhitespace().print(response);
         logger.info("📦 Response: {}", responseJson);
         return responseJson;
     }
 
-    private String handlePaymentDetails(JsonNode payloadJson) throws Exception {
+    private String handlePaymentDetails(JsonNode payloadJson, String apiKey) throws Exception {
         logger.info("📦 Request: {}", payloadJson.toString());
 
         PaymentDetailsRequest.Builder requestBuilder = PaymentDetailsRequest.newBuilder();
         JsonFormat.parser().ignoringUnknownFields().merge(payloadJson.toString(), requestBuilder);
         PaymentDetailsRequest request = requestBuilder.build();
 
-        PaymentDetailsResponse response = callKodyPaymentDetails(request);
+        PaymentDetailsResponse response = callKodyPaymentDetails(request, apiKey);
 
         String responseJson = JsonFormat.printer().omittingInsignificantWhitespace().print(response);
         logger.info("📦 Response: {}", responseJson);
         return responseJson;
     }
 
-    private PaymentInitiationResponse callKodyInitiatePayment(PaymentInitiationRequest request) {
+    private PaymentInitiationResponse callKodyInitiatePayment(PaymentInitiationRequest request, String apiKey) {
         ManagedChannel kodyChannel = null;
         try {
             kodyChannel = ManagedChannelBuilder.forAddress(kodyHostname, 443)
                     .useTransportSecurity()
                     .build();
 
-            KodyEcomPaymentsServiceGrpc.KodyEcomPaymentsServiceBlockingStub kodyClient = createKodyClient(kodyChannel);
+            KodyEcomPaymentsServiceGrpc.KodyEcomPaymentsServiceBlockingStub kodyClient = createKodyClient(kodyChannel, apiKey);
 
             PaymentInitiationResponse response = kodyClient.initiatePayment(request);
 
@@ -324,14 +326,14 @@ public class KodyPaymentSubscriber extends CommonContext {
         }
     }
 
-    private PaymentDetailsResponse callKodyPaymentDetails(PaymentDetailsRequest request) {
+    private PaymentDetailsResponse callKodyPaymentDetails(PaymentDetailsRequest request, String apiKey) {
         ManagedChannel kodyChannel = null;
         try {
             kodyChannel = ManagedChannelBuilder.forAddress(kodyHostname, 443)
                     .useTransportSecurity()
                     .build();
 
-            KodyEcomPaymentsServiceGrpc.KodyEcomPaymentsServiceBlockingStub kodyClient = createKodyClient(kodyChannel);
+            KodyEcomPaymentsServiceGrpc.KodyEcomPaymentsServiceBlockingStub kodyClient = createKodyClient(kodyChannel, apiKey);
 
             return kodyClient.paymentDetails(request);
 
@@ -349,9 +351,9 @@ public class KodyPaymentSubscriber extends CommonContext {
         }
     }
 
-    private KodyEcomPaymentsServiceGrpc.KodyEcomPaymentsServiceBlockingStub createKodyClient(ManagedChannel channel) {
+    private KodyEcomPaymentsServiceGrpc.KodyEcomPaymentsServiceBlockingStub createKodyClient(ManagedChannel channel, String apiKey) {
         Metadata metadata = new Metadata();
-        metadata.put(Metadata.Key.of("x-api-key", Metadata.ASCII_STRING_MARSHALLER), kodyApiKey);
+        metadata.put(Metadata.Key.of("X-API-Key", Metadata.ASCII_STRING_MARSHALLER), apiKey);
 
         return KodyEcomPaymentsServiceGrpc.newBlockingStub(channel)
                 .withInterceptors(MetadataUtils.newAttachHeadersInterceptor(metadata));
@@ -369,28 +371,28 @@ public class KodyPaymentSubscriber extends CommonContext {
         }
     }
 
-    private String handleGetPayments(JsonNode payloadJson) throws Exception {
+    private String handleGetPayments(JsonNode payloadJson, String apiKey) throws Exception {
         logger.info("📦 Request: {}", payloadJson.toString());
 
         GetPaymentsRequest.Builder requestBuilder = GetPaymentsRequest.newBuilder();
         JsonFormat.parser().ignoringUnknownFields().merge(payloadJson.toString(), requestBuilder);
         GetPaymentsRequest request = requestBuilder.build();
 
-        GetPaymentsResponse response = callKodyGetPayments(request);
+        GetPaymentsResponse response = callKodyGetPayments(request, apiKey);
 
         String responseJson = JsonFormat.printer().omittingInsignificantWhitespace().print(response);
         logger.info("📦 Response: {}", responseJson);
         return responseJson;
     }
 
-    private GetPaymentsResponse callKodyGetPayments(GetPaymentsRequest request) {
+    private GetPaymentsResponse callKodyGetPayments(GetPaymentsRequest request, String apiKey) {
         ManagedChannel kodyChannel = null;
         try {
             kodyChannel = ManagedChannelBuilder.forAddress(kodyHostname, 443)
                     .useTransportSecurity()
                     .build();
 
-            KodyEcomPaymentsServiceGrpc.KodyEcomPaymentsServiceBlockingStub kodyClient = createKodyClient(kodyChannel);
+            KodyEcomPaymentsServiceGrpc.KodyEcomPaymentsServiceBlockingStub kodyClient = createKodyClient(kodyChannel, apiKey);
 
             return kodyClient.getPayments(request);
 
@@ -408,28 +410,28 @@ public class KodyPaymentSubscriber extends CommonContext {
         }
     }
 
-    private String handleRefund(JsonNode payloadJson) throws Exception {
+    private String handleRefund(JsonNode payloadJson, String apiKey) throws Exception {
         logger.info("📦 Request: {}", payloadJson.toString());
 
         RefundRequest.Builder requestBuilder = RefundRequest.newBuilder();
         JsonFormat.parser().ignoringUnknownFields().merge(payloadJson.toString(), requestBuilder);
         RefundRequest request = requestBuilder.build();
 
-        RefundResponse response = callKodyRefund(request);
+        RefundResponse response = callKodyRefund(request, apiKey);
 
         String responseJson = JsonFormat.printer().omittingInsignificantWhitespace().print(response);
         logger.info("📦 Response: {}", responseJson);
         return responseJson;
     }
 
-    private RefundResponse callKodyRefund(RefundRequest request) {
+    private RefundResponse callKodyRefund(RefundRequest request, String apiKey) {
         ManagedChannel kodyChannel = null;
         try {
             kodyChannel = ManagedChannelBuilder.forAddress(kodyHostname, 443)
                     .useTransportSecurity()
                     .build();
 
-            KodyEcomPaymentsServiceGrpc.KodyEcomPaymentsServiceBlockingStub kodyClient = createKodyClient(kodyChannel);
+            KodyEcomPaymentsServiceGrpc.KodyEcomPaymentsServiceBlockingStub kodyClient = createKodyClient(kodyChannel, apiKey);
 
             // The refund method returns a stream, so we need to get the first response
             java.util.Iterator<RefundResponse> responseIterator = kodyClient.refund(request);
@@ -473,7 +475,7 @@ public class KodyPaymentSubscriber extends CommonContext {
         try {
             String errorPayload = String.format("{\"error\": {\"message\": \"%s\"}}",
                     errorMessage.replace("\"", "\\\""));
-            publishResponse(correlationId, "error", errorPayload);
+            publishResponse(correlationId, "response.error", errorPayload);
         } catch (Exception e) {
             logger.error("❌ Error publishing error response", e);
         }

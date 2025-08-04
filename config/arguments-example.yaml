@@ -23,9 +23,9 @@ USER_ID: your-user-id
 # =========================
 # Kody gRPC API Hostname (-ap for Asia, -eu for Europe)
 KODY_HOSTNAME: grpc-staging-ap.kodypay.com
-# Your Kody API Key
+# Your Kody API Key, used for automation testing only
 KODY_API_KEY: your-kody-api-key-here
-# Your Kody Store ID
+# Your Kody Store ID, used for automation testing only
 KODY_STORE_ID: your-store-id-here
 
 # =========================

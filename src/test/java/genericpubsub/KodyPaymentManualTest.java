@@ -404,7 +404,6 @@ public class KodyPaymentManualTest {
         try {
             logger.info("🔍 Extracting payment ID from response: {}", responseJson);
 
-            // Simple pattern for paymentId field
             String paymentIdPattern = "\"paymentId\"\\s*:\\s*\"([^\"]+)\"";
             java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(paymentIdPattern);
             java.util.regex.Matcher matcher = pattern.matcher(responseJson);
