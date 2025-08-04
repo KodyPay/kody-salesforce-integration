@@ -29,33 +29,14 @@ ACCESS_TOKEN: null
 # Locate the Salesforce ID for a User
 USER_ID: 01IQz000004TqLt
 
+# Topic to publish/subscribe to (Required)
+TOPIC: /event/KodyPayment__e
+
 # =========================
 # Optional Configurations:
 # =========================
-# Topic to publish/subscribe to (default: /event/Order_Event__e)
-TOPIC: /event/KodyPayment__e
-
-# Number of Events to publish in single or separate batches (default: 5)
-# Used only by PublishStream.java
-NUMBER_OF_EVENTS_TO_PUBLISH: 1
-# Indicates whether to add events to a single PublishRequest (true) or
-# in different PublishRequests (default: false)
-# Used only by PublishStream.java
-SINGLE_PUBLISH_REQUEST: true
-# Number of events to subscribe to in each FetchRequest/ManagedFetchRequest (default: 5)
-NUMBER_OF_EVENTS_IN_FETCHREQUEST: 5
 # ReplayPreset (Accepted Values: {EARLIEST, LATEST (default), CUSTOM})
 REPLAY_PRESET: LATEST
-# Replay ID in ByteString
-REPLAY_ID: [0, 0, 0, 0, 0, 14, -127, 50, 0, 0]
-# Flag to enable/disable processing of bitmap fields in ChangeEventHeader in Subscribe and
-# ManagedSubscribe examples for change data capture events (default: false)
-PROCESS_CHANGE_EVENT_HEADER_FIELDS: null
-
-# ManagedSubscribe RPC parameters
-# For ManagedSubscribe.java, either supply the developer name or the ID of ManagedEventSubscription
-MANAGED_SUB_DEVELOPER_NAME: null
-MANAGED_SUB_ID: null
 
 # =========================
 # Kody Payment Integration Configurations:

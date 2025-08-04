@@ -23,16 +23,10 @@ public class ApplicationConfig {
     private String pubsubHost;
     private Integer pubsubPort;
     private String topic;
-    private Integer numberOfEventsToPublish;
-    private Boolean singlePublishRequest;
-    private Integer numberOfEventsToSubscribeInEachFetchRequest;
-    private Boolean processChangedFields;
     private Boolean plaintextChannel;
     private Boolean providedLoginUrl;
     private ReplayPreset replayPreset;
     private ByteString replayId;
-    private String managedSubscriptionId;
-    private String developerName;
     private String userId;
     private String kodyHostname;
     private String kodyApiKey;
@@ -40,8 +34,8 @@ public class ApplicationConfig {
 
     public ApplicationConfig() {
         this(null, null, null, null, null,
-                null, null, null, 5, false, 5, false,
-                false, false, ReplayPreset.LATEST, null, null, null, null);
+                null, null, null,
+                false, false, ReplayPreset.LATEST, null, null);
     }
     public ApplicationConfig(String filename) throws IOException {
 
@@ -78,17 +72,12 @@ public class ApplicationConfig {
         // Reading Optional Parameters
         this.username = obj.get("USERNAME") == null ? null : obj.get("USERNAME").toString();
         this.password = obj.get("PASSWORD") == null ? null : obj.get("PASSWORD").toString();
-        this.topic = obj.get("TOPIC") == null ? "/event/Order_Event__e" : obj.get("TOPIC").toString();
+        this.topic = obj.get("TOPIC") == null ? null : obj.get("TOPIC").toString();
+        if (this.topic == null || this.topic.isEmpty()) {
+            throw new IllegalArgumentException("TOPIC is required in configuration");
+        }
         this.tenantId = obj.get("TENANT_ID") == null ? null : obj.get("TENANT_ID").toString();
         this.accessToken = obj.get("ACCESS_TOKEN") == null ? null : obj.get("ACCESS_TOKEN").toString();
-        this.numberOfEventsToPublish = obj.get("NUMBER_OF_EVENTS_TO_PUBLISH") == null ?
-                5 : Integer.parseInt(obj.get("NUMBER_OF_EVENTS_TO_PUBLISH").toString());
-        this.singlePublishRequest = obj.get("SINGLE_PUBLISH_REQUEST") == null ?
-                false : Boolean.parseBoolean(obj.get("SINGLE_PUBLISH_REQUEST").toString());
-        this.numberOfEventsToSubscribeInEachFetchRequest = obj.get("NUMBER_OF_EVENTS_IN_FETCHREQUEST") == null ?
-                5 : Integer.parseInt(obj.get("NUMBER_OF_EVENTS_IN_FETCHREQUEST").toString());
-        this.processChangedFields = obj.get("PROCESS_CHANGE_EVENT_HEADER_FIELDS") == null ?
-                false : Boolean.parseBoolean(obj.get("PROCESS_CHANGE_EVENT_HEADER_FIELDS").toString());
         this.plaintextChannel = obj.get("USE_PLAINTEXT_CHANNEL") != null && Boolean.parseBoolean(obj.get("USE_PLAINTEXT_CHANNEL").toString());
         this.providedLoginUrl = obj.get("USE_PROVIDED_LOGIN_URL") != null && Boolean.parseBoolean(obj.get("USE_PROVIDED_LOGIN_URL").toString());
         this.userId = obj.get("USER_ID") == null? null : obj.get("USER_ID").toString();
@@ -105,8 +94,6 @@ public class ApplicationConfig {
             this.replayPreset = ReplayPreset.LATEST;
         }
 
-        this.developerName = obj.get("MANAGED_SUB_DEVELOPER_NAME") == null ? null : obj.get("MANAGED_SUB_DEVELOPER_NAME").toString();
-        this.managedSubscriptionId = obj.get("MANAGED_SUB_ID") == null ? null : obj.get("MANAGED_SUB_ID").toString();
         
         // Reading Kody configuration
         this.kodyHostname = obj.get("KODY_HOSTNAME") == null ? null : obj.get("KODY_HOSTNAME").toString();
@@ -117,14 +104,13 @@ public class ApplicationConfig {
     public ApplicationConfig(String username, String password, String loginUrl,
                                  String pubsubHost, int pubsubPort, String topic) {
         this(username, password, loginUrl, null, null, pubsubHost, pubsubPort, topic,
-                5, false, Integer.MAX_VALUE, false, false, false, ReplayPreset.LATEST, null, null, null, null);
+                false, false, ReplayPreset.LATEST, null, null);
     }
 
     public ApplicationConfig(String username, String password, String loginUrl, String tenantId, String accessToken,
-                                 String pubsubHost, Integer pubsubPort, String topic, Integer numberOfEventsToPublish,
-                                 Boolean singlePublishRequest, Integer numberOfEventsToSubscribeInEachFetchRequest,
-                                 Boolean processChangedFields, Boolean plaintextChannel, Boolean providedLoginUrl,
-                                 ReplayPreset replayPreset, ByteString replayId, String devName, String managedSubId, String userId) {
+                                 String pubsubHost, Integer pubsubPort, String topic,
+                                 Boolean plaintextChannel, Boolean providedLoginUrl,
+                                 ReplayPreset replayPreset, ByteString replayId, String userId) {
         this.username = username;
         this.password = password;
         this.loginUrl = loginUrl;
@@ -133,16 +119,10 @@ public class ApplicationConfig {
         this.pubsubHost = pubsubHost;
         this.pubsubPort = pubsubPort;
         this.topic = topic;
-        this.singlePublishRequest = singlePublishRequest;
-        this.numberOfEventsToPublish = numberOfEventsToPublish;
-        this.numberOfEventsToSubscribeInEachFetchRequest = numberOfEventsToSubscribeInEachFetchRequest;
-        this.processChangedFields = processChangedFields;
         this.plaintextChannel = plaintextChannel;
         this.providedLoginUrl = providedLoginUrl;
         this.replayPreset = replayPreset;
         this.replayId = replayId;
-        this.developerName = devName;
-        this.managedSubscriptionId = managedSubId;
         this.userId = userId;
     }
 
@@ -202,37 +182,6 @@ public class ApplicationConfig {
         this.pubsubPort = pubsubPort;
     }
 
-    public Integer getNumberOfEventsToPublish() {
-        return numberOfEventsToPublish;
-    }
-
-    public void setNumberOfEventsToPublish(Integer numberOfEventsToPublish) {
-        this.numberOfEventsToPublish = numberOfEventsToPublish;
-    }
-
-    public Boolean getSinglePublishRequest() {
-        return singlePublishRequest;
-    }
-
-    public void setSinglePublishRequest(Boolean singlePublishRequest) {
-        this.singlePublishRequest = singlePublishRequest;
-    }
-
-    public int getNumberOfEventsToSubscribeInEachFetchRequest() {
-        return numberOfEventsToSubscribeInEachFetchRequest;
-    }
-
-    public void setNumberOfEventsToSubscribeInEachFetchRequest(int numberOfEventsToSubscribeInEachFetchRequest) {
-        this.numberOfEventsToSubscribeInEachFetchRequest = numberOfEventsToSubscribeInEachFetchRequest;
-    }
-
-    public Boolean getProcessChangedFields() {
-        return processChangedFields;
-    }
-
-    public void setProcessChangedFields(Boolean processChangedFields) {
-        this.processChangedFields = processChangedFields;
-    }
 
     public boolean usePlaintextChannel() {
         return plaintextChannel;
@@ -274,21 +223,6 @@ public class ApplicationConfig {
         this.replayId = replayId;
     }
 
-    public String getManagedSubscriptionId() {
-        return managedSubscriptionId;
-    }
-
-    public void setManagedSubscriptionId(String managedSubscriptionId) {
-        this.managedSubscriptionId = managedSubscriptionId;
-    }
-
-    public String getDeveloperName() {
-        return developerName;
-    }
-
-    public void setDeveloperName(String developerName) {
-        this.developerName = developerName;
-    }
 
     public String getUserId() {
         return userId;

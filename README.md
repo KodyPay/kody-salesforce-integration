@@ -12,7 +12,7 @@ Java integration between Salesforce Pub/Sub API and Kody Payment API for real-ti
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Java 11+ and Maven
+- Java 21+ and Maven
 - Salesforce org with Pub/Sub API access
 - Kody Payment API credentials
 
