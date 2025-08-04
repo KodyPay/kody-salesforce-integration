@@ -46,7 +46,28 @@ public class ApplicationConfig {
     public ApplicationConfig(String filename) throws IOException {
 
         Yaml yaml = new Yaml();
-        InputStream inputStream = new FileInputStream("src/main/resources/"+filename);
+        InputStream inputStream = null;
+        
+        // Try Docker/production path first, then fallback to local config directory
+        String[] possiblePaths = {
+            "/app/config/" + filename,      // Docker mounted volume
+            "config/" + filename            // Local config directory
+        };
+        
+        for (String path : possiblePaths) {
+            try {
+                inputStream = new FileInputStream(path);
+                break;
+            } catch (IOException e) {
+                // Continue to next path
+            }
+        }
+        
+        if (inputStream == null) {
+            throw new IOException("Configuration file not found: " + filename + 
+                ". Searched paths: " + String.join(", ", possiblePaths));
+        }
+        
         HashMap<String, Object> obj = yaml.load(inputStream);
 
         // Reading Required Parameters

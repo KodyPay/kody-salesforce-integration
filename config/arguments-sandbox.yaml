@@ -65,4 +65,4 @@ KODY_HOSTNAME: grpc-staging-ap.kodypay.com
 # Kody API Key for authentication
 KODY_API_KEY:
 # Kody Store ID for payment requests
-KODY_STORE_ID: 7fbec013-34e1-4e93-a0ee-f4f91b94eb17
+KODY_STORE_ID:

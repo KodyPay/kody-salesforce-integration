@@ -11,29 +11,29 @@ import java.util.UUID;
  * This allows testing each API individually without full integration test overhead
  * 
  * Usage: 
- *   ./run.sh genericpubsub.KodyPaymentQuickTest sandbox InitiatePayment
- *   ./run.sh genericpubsub.KodyPaymentQuickTest sandbox PaymentDetails <paymentId>
- *   ./run.sh genericpubsub.KodyPaymentQuickTest sandbox GetPayments
- *   ./run.sh genericpubsub.KodyPaymentQuickTest sandbox Refund <paymentId>
+ *   ./run.sh genericpubsub.KodyPaymentQuickTest sandbox request.ecom.v1.InitiatePayment
+ *   ./run.sh genericpubsub.KodyPaymentQuickTest sandbox request.ecom.v1.PaymentDetails <paymentId>
+ *   ./run.sh genericpubsub.KodyPaymentQuickTest sandbox request.ecom.v1.GetPayments
+ *   ./run.sh genericpubsub.KodyPaymentQuickTest sandbox request.ecom.v1.Refund <paymentId>
  */
 public class KodyPaymentQuickTest {
     private static final Logger logger = LoggerFactory.getLogger(KodyPaymentQuickTest.class);
 
     public static void main(String[] args) {
-        if (args.length < 3) {
+        if (args.length < 2) {
             logger.error("❌ Usage: ./run.sh genericpubsub.KodyPaymentQuickTest <environment> <api> [paymentId]");
-            logger.error("   APIs: InitiatePayment, PaymentDetails, GetPayments, Refund");
+            logger.error("   APIs: request.ecom.v1.InitiatePayment, request.ecom.v1.PaymentDetails, request.ecom.v1.GetPayments, request.ecom.v1.Refund");
             logger.error("   Examples:");
-            logger.error("     ./run.sh genericpubsub.KodyPaymentQuickTest sandbox InitiatePayment");
-            logger.error("     ./run.sh genericpubsub.KodyPaymentQuickTest sandbox PaymentDetails test-payment-123");
-            logger.error("     ./run.sh genericpubsub.KodyPaymentQuickTest sandbox GetPayments");
-            logger.error("     ./run.sh genericpubsub.KodyPaymentQuickTest sandbox Refund test-payment-123");
+            logger.error("     ./run.sh genericpubsub.KodyPaymentQuickTest sandbox request.ecom.v1.InitiatePayment");
+            logger.error("     ./run.sh genericpubsub.KodyPaymentQuickTest sandbox request.ecom.v1.PaymentDetails test-payment-123");
+            logger.error("     ./run.sh genericpubsub.KodyPaymentQuickTest sandbox request.ecom.v1.GetPayments");
+            logger.error("     ./run.sh genericpubsub.KodyPaymentQuickTest sandbox request.ecom.v1.Refund test-payment-123");
             return;
         }
 
-        String environment = args[1];
-        String api = args[2];
-        String paymentId = args.length > 3 ? args[3] : null;
+        String environment = args[0];
+        String api = args[1];
+        String paymentId = args.length > 2 ? args[2] : null;
 
         logger.info("🧪 Quick Test - {} API on {} environment", api, environment);
 
@@ -69,9 +69,11 @@ public class KodyPaymentQuickTest {
             boolean success = false;
             switch (api.toLowerCase()) {
                 case "initiatepayment":
+                case "request.ecom.v1.initiatepayment":
                     success = testInitiatePayment(publisher);
                     break;
                 case "paymentdetails":
+                case "request.ecom.v1.paymentdetails":
                     if (paymentId == null) {
                         logger.info("📦 No payment ID provided, creating one first...");
                         paymentId = createPaymentAndGetId(publisher);
@@ -84,9 +86,11 @@ public class KodyPaymentQuickTest {
                     }
                     break;
                 case "getpayments":
+                case "request.ecom.v1.getpayments":
                     success = testGetPayments(publisher);
                     break;
                 case "refund":
+                case "request.ecom.v1.refund":
                     if (paymentId == null) {
                         logger.info("📦 No payment ID provided, creating one first...");
                         paymentId = createPaymentAndGetId(publisher);
@@ -99,7 +103,7 @@ public class KodyPaymentQuickTest {
                     }
                     break;
                 default:
-                    logger.error("❌ Unsupported API: {}. Use: InitiatePayment, PaymentDetails, GetPayments, or Refund", api);
+                    logger.error("❌ Unsupported API: {}. Use: request.ecom.v1.InitiatePayment, request.ecom.v1.PaymentDetails, request.ecom.v1.GetPayments, or request.ecom.v1.Refund", api);
                     return;
             }
 

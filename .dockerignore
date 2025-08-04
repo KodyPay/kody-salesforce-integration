@@ -1,0 +1,36 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+README.md
+docs/
+
+# IDE files
+.vscode/
+.idea/
+*.iml
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Build artifacts (will be built inside container)
+target/
+.mvn/wrapper/maven-wrapper.jar
+
+# Logs
+logs/
+*.log
+
+# Test files
+src/test/
+
+# Docker files
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# Temporary files
+*.tmp
+*.temp

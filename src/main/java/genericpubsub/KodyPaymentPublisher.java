@@ -38,7 +38,6 @@ public class KodyPaymentPublisher extends CommonContext {
     private static final Logger logger = LoggerFactory.getLogger(KodyPaymentPublisher.class);
     private final int TIMEOUT_SECONDS = 30;
 
-    ClientCallStreamObserver<PublishRequest> requestObserver = null;
 
     private final Map<String, CountDownLatch> pendingRequests = new ConcurrentHashMap<>();
     private final Map<String, PaymentResponse> responses = new ConcurrentHashMap<>();
@@ -127,7 +126,7 @@ public class KodyPaymentPublisher extends CommonContext {
         StreamObserver<PublishResponse> pubObserver = getDefaultPublishStreamObserver(finishLatchRef,
                 numExpectedPublishResponses, publishResponses, failed);
 
-        requestObserver = (ClientCallStreamObserver<PublishRequest>) asyncStub.publishStream(pubObserver);
+        ClientCallStreamObserver<PublishRequest> requestObserver = (ClientCallStreamObserver<PublishRequest>) asyncStub.publishStream(pubObserver);
 
         PublishRequest publishRequest = generatePaymentPublishRequest(correlationId, method, payload);
         requestObserver.onNext(publishRequest);
@@ -400,10 +399,10 @@ public class KodyPaymentPublisher extends CommonContext {
         if (args.length < 4) {
             logger.error("❌ Usage: ./run.sh genericpubsub.KodyPaymentPublisher <environment> <method> '<json_payload>'");
             logger.error("   Examples:");
-            logger.error("     ./run.sh genericpubsub.KodyPaymentPublisher sandbox ecom.v1.InitiatePayment '{\"storeId\":\"123\",\"amount\":1000}'");
-            logger.error("     ./run.sh genericpubsub.KodyPaymentPublisher sandbox ecom.v1.PaymentDetails '{\"storeId\":\"123\",\"paymentId\":\"pay123\"}'");
-            logger.error("     ./run.sh genericpubsub.KodyPaymentPublisher sandbox ecom.v1.GetPayments '{\"storeId\":\"123\"}'");
-            logger.error("     ./run.sh genericpubsub.KodyPaymentPublisher sandbox ecom.v1.Refund '{\"storeId\":\"123\",\"paymentId\":\"pay123\",\"amount\":\"10.00\"}'");
+            logger.error("     ./run.sh genericpubsub.KodyPaymentPublisher sandbox request.ecom.v1.InitiatePayment '{\"storeId\":\"123\",\"amount\":1000}'");
+            logger.error("     ./run.sh genericpubsub.KodyPaymentPublisher sandbox request.ecom.v1.PaymentDetails '{\"storeId\":\"123\",\"paymentId\":\"pay123\"}'");
+            logger.error("     ./run.sh genericpubsub.KodyPaymentPublisher sandbox request.ecom.v1.GetPayments '{\"storeId\":\"123\"}'");
+            logger.error("     ./run.sh genericpubsub.KodyPaymentPublisher sandbox request.ecom.v1.Refund '{\"storeId\":\"123\",\"paymentId\":\"pay123\",\"amount\":\"10.00\"}'");
             return;
         }
 
@@ -420,15 +419,14 @@ public class KodyPaymentPublisher extends CommonContext {
             logger.info("✅ Publisher initialized with response subscription");
 
             String correlationId = UUID.randomUUID().toString();
-            String requestMethod = "request." + method;
 
             logger.info("🆔 Correlation ID: {}", correlationId);
-            logger.info("🔧 Request Method: {}", requestMethod);
+            logger.info("🔧 Request Method: {}", method);
             logger.info("📦 Request Payload: {}", payload);
 
             try {
                 PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponse(
-                        correlationId, requestMethod, payload, 60);
+                        correlationId, method, payload, 60);
 
                 logger.info("🎉 KODY PAYMENT SUCCESS!");
                 logger.info("🆔 Response Correlation ID: {}", response.getCorrelationId());

@@ -17,7 +17,7 @@ ENVIRONMENT=$1
 echo "🔧 Environment: $ENVIRONMENT"
 
 # Check if configuration file exists
-CONFIG_FILE="src/main/resources/arguments-${ENVIRONMENT}.yaml"
+CONFIG_FILE="config/arguments-${ENVIRONMENT}.yaml"
 if [ ! -f "$CONFIG_FILE" ]; then
     echo "❌ Configuration file not found: $CONFIG_FILE"
     echo "   Please make sure the configuration file exists and contains:"

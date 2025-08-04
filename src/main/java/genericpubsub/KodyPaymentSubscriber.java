@@ -545,12 +545,13 @@ public class KodyPaymentSubscriber extends CommonContext {
     }
 
     public static void main(String[] args) {
-        if (args.length < 2) {
-            logger.error("❌ Usage: ./run.sh genericpubsub.KodyPaymentSubscriber sandbox");
+        if (args.length < 1) {
+            logger.error("❌ Usage: java -cp app.jar genericpubsub.KodyPaymentSubscriber sandbox");
+            logger.error("   Or: ./run.sh genericpubsub.KodyPaymentSubscriber sandbox");
             return;
         }
 
-        String environment = args[1];
+        String environment = args[0];
         logger.info("🚀 Starting Kody Payment Subscriber for environment: {}", environment);
 
         try {

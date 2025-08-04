@@ -18,4 +18,10 @@ fi
 
 echo "ENV: $ENV"
 
-java -cp target/pubsub-java-1.0-SNAPSHOT.jar $EXAMPLE $@
+# For KodyPaymentPublisher, pass all arguments except the first (class name)
+# For other classes like KodyPaymentSubscriber, just pass the environment
+if [ "$EXAMPLE" = "genericpubsub.KodyPaymentPublisher" ]; then
+    java -cp target/pubsub-java-1.0-SNAPSHOT.jar $EXAMPLE "$@"
+else
+    java -cp target/pubsub-java-1.0-SNAPSHOT.jar $EXAMPLE $ENV
+fi
