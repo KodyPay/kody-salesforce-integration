@@ -87,12 +87,9 @@ public class KodyPaymentSubscriber extends CommonContext {
         StreamObserver<PublishResponse> publishResponseObserver = new StreamObserver<PublishResponse>() {
             @Override
             public void onNext(PublishResponse response) {
-                logger.info("📡 Published with RPC ID: {}", response.getRpcId());
                 for (PublishResult result : response.getResultsList()) {
                     if (result.hasError()) {
                         logger.error("❌ Publish error: {}", result.getError().getMsg());
-                    } else {
-                        logger.info("✅ Published with replay ID: {}", result.getReplayId().toStringUtf8());
                     }
                 }
             }
@@ -198,8 +195,6 @@ public class KodyPaymentSubscriber extends CommonContext {
 
     private void processPaymentEvent(ConsumerEvent event) {
         try {
-            logger.info("🎯 Processing event with replay ID: {}", event.getReplayId().toStringUtf8());
-
             Schema schema = new Schema.Parser().parse(schemaInfo.getSchemaJson());
             GenericRecord record = deserialize(schema, event.getEvent().getPayload());
 
@@ -208,10 +203,7 @@ public class KodyPaymentSubscriber extends CommonContext {
             String payload = safeGetString(record, "payload__c");
             String apiKey = safeGetString(record, "api_key__c");
 
-            logger.info("🔧 Event - Correlation: {}, Method: {}", correlationId, method);
-
             if (method == null || !method.startsWith("request.")) {
-                logger.debug("ℹ️ Ignoring non-request method: {}", method);
                 return;
             }
 
@@ -458,13 +450,11 @@ public class KodyPaymentSubscriber extends CommonContext {
     }
     private void publishResponse(String correlationId, String responseMethod, String responsePayload) {
         try {
-            logger.info("📤 Publishing response - Correlation: {}", correlationId);
-
             GenericRecord responseEvent = createResponseEvent(correlationId, responseMethod, responsePayload);
             PublishRequest publishRequest = createPublishRequest(responseEvent);
 
             publishStream.onNext(publishRequest);
-            logger.info("🎉 Response sent!");
+            logger.info("📤 Response sent - Correlation: {}", correlationId);
 
         } catch (Exception e) {
             logger.error("❌ Error publishing response", e);
