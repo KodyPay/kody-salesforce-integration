@@ -20,7 +20,7 @@ LOGIN_URL: https://agility-energy-4818--partial.sandbox.my.salesforce.com
 USERNAME: kody-partial@goodkat.com
 # Your Salesforce Password
 # PASSWORD = login_password + security_token
-PASSWORD:
+PASSWORD: ZGT0yvr2xbu!pbw7zqtGMdmeRVHn9rstwEA5oBUjman8
 # Your Salesforce org Tenant ID
 TENANT_ID: null
 # Your Salesforce Session Token
@@ -63,6 +63,6 @@ MANAGED_SUB_ID: null
 # Kody gRPC API Hostname, -ap for Asia region and -eu for Europe region
 KODY_HOSTNAME: grpc-staging-ap.kodypay.com
 # Kody API Key for authentication, used for automation testing only
-KODY_API_KEY:
+KODY_API_KEY: zsr1gGOKCCk4HB-rKLESwJHWs0kmONj1p-HT7txoVqCn
 # Kody Store ID for payment requests, used for automation testing only
-KODY_STORE_ID:
+KODY_STORE_ID: 7fbec013-34e1-4e93-a0ee-f4f91b94eb17
