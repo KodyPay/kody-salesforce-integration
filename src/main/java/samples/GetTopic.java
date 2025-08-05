@@ -1,9 +1,9 @@
-package genericpubsub;
+package samples;
 
 import com.salesforce.eventbus.protobuf.TopicInfo;
 import com.salesforce.eventbus.protobuf.TopicRequest;
 import utility.CommonContext;
-import utility.ExampleConfigurations;
+import utility.ApplicationConfig;
 
 import java.io.IOException;
 
@@ -17,7 +17,7 @@ import java.io.IOException;
  */
 public class GetTopic extends CommonContext {
 
-    public GetTopic(final ExampleConfigurations options) {
+    public GetTopic(final ApplicationConfig options) {
         super(options);
     }
 
@@ -32,12 +32,12 @@ public class GetTopic extends CommonContext {
     }
 
     public static void main(String[] args) throws IOException {
-        ExampleConfigurations exampleConfigurations = new ExampleConfigurations("arguments-" + args[1] + ".yaml");
+        ApplicationConfig config = new ApplicationConfig("arguments-" + args[1] + ".yaml");
 
         // Using the try-with-resource statement. The CommonContext class implements AutoCloseable in
         // order to close the resources used.
-        try (GetTopic example = new GetTopic(exampleConfigurations)) {
-            example.getTopic(exampleConfigurations.getTopic());
+        try (GetTopic example = new GetTopic(config)) {
+            example.getTopic(config.getTopic());
         } catch (Exception e) {
             printStatusRuntimeException("Error while Getting Topic", e);
         }

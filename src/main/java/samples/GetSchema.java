@@ -1,4 +1,4 @@
-package genericpubsub;
+package samples;
 
 import java.io.IOException;
 
@@ -10,7 +10,7 @@ import com.salesforce.eventbus.protobuf.TopicInfo;
 import com.salesforce.eventbus.protobuf.TopicRequest;
 
 import utility.CommonContext;
-import utility.ExampleConfigurations;
+import utility.ApplicationConfig;
 
 /**
  * An example that retrieves the Schema of a single-topic.
@@ -22,7 +22,7 @@ import utility.ExampleConfigurations;
  */
 public class GetSchema extends CommonContext {
 
-    public GetSchema(final ExampleConfigurations options) {
+    public GetSchema(final ApplicationConfig options) {
         super(options);
     }
 
@@ -48,12 +48,12 @@ public class GetSchema extends CommonContext {
     }
 
     public static void main(String[] args) throws IOException {
-        ExampleConfigurations exampleConfigurations = new ExampleConfigurations("arguments-" + args[1] + ".yaml");
+        ApplicationConfig config = new ApplicationConfig("arguments-" + args[1] + ".yaml");
 
         // Using the try-with-resource statement. The CommonContext class implements AutoCloseable in
         // order to close the resources used.
-        try (GetSchema example = new GetSchema(exampleConfigurations)) {
-            example.getSchema(exampleConfigurations.getTopic());
+        try (GetSchema example = new GetSchema(config)) {
+            example.getSchema(config.getTopic());
         } catch (Exception e) {
             printStatusRuntimeException("Getting schema", e);
         }

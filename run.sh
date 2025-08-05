@@ -5,17 +5,25 @@
 #   ./run.sh <package-name><class-name>
 #
 
-EXAMPLE=$1
-if [ "x$EXAMPLE" = "x" ]; then
-  echo "Please specify one of the example class names from the package com.salesforce.eventbusclient.example"
-  exit -1
+APPLICATION=$1
+if [ "$APPLICATION" = "" ]; then
+  echo "Please specify one of the application class names:"
+  echo "  - kody.integration.KodyPaymentService"
+  echo "  - samples.KodyPaymentPublisher"
+  exit 1
 fi
 ENV=$2
-if [ "x$ENV" = "x" ]; then
-  echo "Please specify environment name"
-  exit -1
+if [ "$ENV" = "" ]; then
+  echo "Please specify environment name (sandbox/production)"
+  exit 1
 fi
 
 echo "ENV: $ENV"
 
-java -cp target/pubsub-java-1.0-SNAPSHOT.jar $EXAMPLE $@
+# For KodyPaymentPublisher (in samples), pass all arguments except the first (class name)
+# For other classes like KodyPaymentService, just pass the environment
+if [ "$APPLICATION" = "samples.KodyPaymentPublisher" ]; then
+    java -cp target/pubsub-java-1.0-SNAPSHOT.jar "$APPLICATION" "$@"
+else
+    java -cp target/pubsub-java-1.0-SNAPSHOT.jar "$APPLICATION" "$ENV"
+fi

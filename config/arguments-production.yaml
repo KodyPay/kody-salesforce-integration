@@ -1,4 +1,4 @@
-# 'arguments-dev.yaml' contains the required and optional configurations for running the examples.
+# 'arguments-sandbox.yaml' contains the required and optional configurations for running the examples.
 #
 # Note: Please ensure to specify a value of `null` to all optional configurations when
 # you do not wish to specify a value for the same. Some optional configurations will be
@@ -29,29 +29,21 @@ ACCESS_TOKEN: null
 # Locate the Salesforce ID for a User
 USER_ID: 01IQz000004TqLt
 
+# Topic to publish/subscribe to (Required)
+TOPIC: /event/KodyPayment__e
+
 # =========================
 # Optional Configurations:
 # =========================
-# Topic to publish/subscribe to (default: /event/Order_Event__e)
-TOPIC: /event/KodyPaymentInitiationRequest__e
-# Number of Events to publish in single or separate batches (default: 5)
-# Used only by PublishStream.java
-NUMBER_OF_EVENTS_TO_PUBLISH: 1
-# Indicates whether to add events to a single PublishRequest (true) or
-# in different PublishRequests (default: false)
-# Used only by PublishStream.java
-SINGLE_PUBLISH_REQUEST: true
-# Number of events to subscribe to in each FetchRequest/ManagedFetchRequest (default: 5)
-NUMBER_OF_EVENTS_IN_FETCHREQUEST: 5
 # ReplayPreset (Accepted Values: {EARLIEST, LATEST (default), CUSTOM})
-REPLAY_PRESET: CUSTOM
-# Replay ID in ByteString
-REPLAY_ID: [0, 0, 0, 0, 0, 14, -127, 50, 0, 0]
-# Flag to enable/disable processing of bitmap fields in ChangeEventHeader in Subscribe and
-# ManagedSubscribe examples for change data capture events (default: false)
-PROCESS_CHANGE_EVENT_HEADER_FIELDS: null
+REPLAY_PRESET: LATEST
 
-# ManagedSubscribe RPC parameters
-# For ManagedSubscribe.java, either supply the developer name or the ID of ManagedEventSubscription
-MANAGED_SUB_DEVELOPER_NAME: null
-MANAGED_SUB_ID: null
+# =========================
+# Kody Payment Integration Configurations:
+# =========================
+# Kody gRPC API Hostname, -ap for Asia region and -eu for Europe region
+KODY_HOSTNAME: grpc-eu.kodypay.com
+# Kody API Key for authentication, used for automation testing only
+KODY_API_KEY:
+# Kody Store ID for payment requests, used for automation testing only
+KODY_STORE_ID:

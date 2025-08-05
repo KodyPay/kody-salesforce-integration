@@ -10,11 +10,11 @@ import java.io.InputStream;
 import java.util.HashMap;
 
 /**
- * The ExampleConfigurations class is used for setting up the configurations for running the examples.
+ * The ApplicationConfig class is used for setting up the configurations for running the examples.
  * The configurations can be read from a YAML file or created directly via an object. It also sets
  * default values when an optional configuration is not specified.
  */
-public class ExampleConfigurations {
+public class ApplicationConfig {
     private String username;
     private String password;
     private String loginUrl;
@@ -23,27 +23,45 @@ public class ExampleConfigurations {
     private String pubsubHost;
     private Integer pubsubPort;
     private String topic;
-    private Integer numberOfEventsToPublish;
-    private Boolean singlePublishRequest;
-    private Integer numberOfEventsToSubscribeInEachFetchRequest;
-    private Boolean processChangedFields;
     private Boolean plaintextChannel;
     private Boolean providedLoginUrl;
     private ReplayPreset replayPreset;
     private ByteString replayId;
-    private String managedSubscriptionId;
-    private String developerName;
     private String userId;
+    private String kodyHostname;
+    private String kodyApiKey;
+    private String kodyStoreId;
 
-    public ExampleConfigurations() {
+    public ApplicationConfig() {
         this(null, null, null, null, null,
-                null, null, null, 5, false, 5, false,
-                false, false, ReplayPreset.LATEST, null, null, null, null);
+                null, null, null,
+                false, false, ReplayPreset.LATEST, null, null);
     }
-    public ExampleConfigurations(String filename) throws IOException {
+    public ApplicationConfig(String filename) throws IOException {
 
         Yaml yaml = new Yaml();
-        InputStream inputStream = new FileInputStream("src/main/resources/"+filename);
+        InputStream inputStream = null;
+        
+        // Try Docker/production path first, then fallback to local config directory
+        String[] possiblePaths = {
+            "/app/config/" + filename,      // Docker mounted volume
+            "config/" + filename            // Local config directory
+        };
+        
+        for (String path : possiblePaths) {
+            try {
+                inputStream = new FileInputStream(path);
+                break;
+            } catch (IOException e) {
+                // Continue to next path
+            }
+        }
+        
+        if (inputStream == null) {
+            throw new IOException("Configuration file not found: " + filename + 
+                ". Searched paths: " + String.join(", ", possiblePaths));
+        }
+        
         HashMap<String, Object> obj = yaml.load(inputStream);
 
         // Reading Required Parameters
@@ -54,17 +72,12 @@ public class ExampleConfigurations {
         // Reading Optional Parameters
         this.username = obj.get("USERNAME") == null ? null : obj.get("USERNAME").toString();
         this.password = obj.get("PASSWORD") == null ? null : obj.get("PASSWORD").toString();
-        this.topic = obj.get("TOPIC") == null ? "/event/Order_Event__e" : obj.get("TOPIC").toString();
+        this.topic = obj.get("TOPIC") == null ? null : obj.get("TOPIC").toString();
+        if (this.topic == null || this.topic.isEmpty()) {
+            throw new IllegalArgumentException("TOPIC is required in configuration");
+        }
         this.tenantId = obj.get("TENANT_ID") == null ? null : obj.get("TENANT_ID").toString();
         this.accessToken = obj.get("ACCESS_TOKEN") == null ? null : obj.get("ACCESS_TOKEN").toString();
-        this.numberOfEventsToPublish = obj.get("NUMBER_OF_EVENTS_TO_PUBLISH") == null ?
-                5 : Integer.parseInt(obj.get("NUMBER_OF_EVENTS_TO_PUBLISH").toString());
-        this.singlePublishRequest = obj.get("SINGLE_PUBLISH_REQUEST") == null ?
-                false : Boolean.parseBoolean(obj.get("SINGLE_PUBLISH_REQUEST").toString());
-        this.numberOfEventsToSubscribeInEachFetchRequest = obj.get("NUMBER_OF_EVENTS_IN_FETCHREQUEST") == null ?
-                5 : Integer.parseInt(obj.get("NUMBER_OF_EVENTS_IN_FETCHREQUEST").toString());
-        this.processChangedFields = obj.get("PROCESS_CHANGE_EVENT_HEADER_FIELDS") == null ?
-                false : Boolean.parseBoolean(obj.get("PROCESS_CHANGE_EVENT_HEADER_FIELDS").toString());
         this.plaintextChannel = obj.get("USE_PLAINTEXT_CHANNEL") != null && Boolean.parseBoolean(obj.get("USE_PLAINTEXT_CHANNEL").toString());
         this.providedLoginUrl = obj.get("USE_PROVIDED_LOGIN_URL") != null && Boolean.parseBoolean(obj.get("USE_PROVIDED_LOGIN_URL").toString());
         this.userId = obj.get("USER_ID") == null? null : obj.get("USER_ID").toString();
@@ -81,21 +94,23 @@ public class ExampleConfigurations {
             this.replayPreset = ReplayPreset.LATEST;
         }
 
-        this.developerName = obj.get("MANAGED_SUB_DEVELOPER_NAME") == null ? null : obj.get("MANAGED_SUB_DEVELOPER_NAME").toString();
-        this.managedSubscriptionId = obj.get("MANAGED_SUB_ID") == null ? null : obj.get("MANAGED_SUB_ID").toString();
+        
+        // Reading Kody configuration
+        this.kodyHostname = obj.get("KODY_HOSTNAME") == null ? null : obj.get("KODY_HOSTNAME").toString();
+        this.kodyApiKey = obj.get("KODY_API_KEY") == null ? null : obj.get("KODY_API_KEY").toString();
+        this.kodyStoreId = obj.get("KODY_STORE_ID") == null ? null : obj.get("KODY_STORE_ID").toString();
     }
 
-    public ExampleConfigurations(String username, String password, String loginUrl,
+    public ApplicationConfig(String username, String password, String loginUrl,
                                  String pubsubHost, int pubsubPort, String topic) {
         this(username, password, loginUrl, null, null, pubsubHost, pubsubPort, topic,
-                5, false, Integer.MAX_VALUE, false, false, false, ReplayPreset.LATEST, null, null, null, null);
+                false, false, ReplayPreset.LATEST, null, null);
     }
 
-    public ExampleConfigurations(String username, String password, String loginUrl, String tenantId, String accessToken,
-                                 String pubsubHost, Integer pubsubPort, String topic, Integer numberOfEventsToPublish,
-                                 Boolean singlePublishRequest, Integer numberOfEventsToSubscribeInEachFetchRequest,
-                                 Boolean processChangedFields, Boolean plaintextChannel, Boolean providedLoginUrl,
-                                 ReplayPreset replayPreset, ByteString replayId, String devName, String managedSubId, String userId) {
+    public ApplicationConfig(String username, String password, String loginUrl, String tenantId, String accessToken,
+                                 String pubsubHost, Integer pubsubPort, String topic,
+                                 Boolean plaintextChannel, Boolean providedLoginUrl,
+                                 ReplayPreset replayPreset, ByteString replayId, String userId) {
         this.username = username;
         this.password = password;
         this.loginUrl = loginUrl;
@@ -104,16 +119,10 @@ public class ExampleConfigurations {
         this.pubsubHost = pubsubHost;
         this.pubsubPort = pubsubPort;
         this.topic = topic;
-        this.singlePublishRequest = singlePublishRequest;
-        this.numberOfEventsToPublish = numberOfEventsToPublish;
-        this.numberOfEventsToSubscribeInEachFetchRequest = numberOfEventsToSubscribeInEachFetchRequest;
-        this.processChangedFields = processChangedFields;
         this.plaintextChannel = plaintextChannel;
         this.providedLoginUrl = providedLoginUrl;
         this.replayPreset = replayPreset;
         this.replayId = replayId;
-        this.developerName = devName;
-        this.managedSubscriptionId = managedSubId;
         this.userId = userId;
     }
 
@@ -173,37 +182,6 @@ public class ExampleConfigurations {
         this.pubsubPort = pubsubPort;
     }
 
-    public Integer getNumberOfEventsToPublish() {
-        return numberOfEventsToPublish;
-    }
-
-    public void setNumberOfEventsToPublish(Integer numberOfEventsToPublish) {
-        this.numberOfEventsToPublish = numberOfEventsToPublish;
-    }
-
-    public Boolean getSinglePublishRequest() {
-        return singlePublishRequest;
-    }
-
-    public void setSinglePublishRequest(Boolean singlePublishRequest) {
-        this.singlePublishRequest = singlePublishRequest;
-    }
-
-    public int getNumberOfEventsToSubscribeInEachFetchRequest() {
-        return numberOfEventsToSubscribeInEachFetchRequest;
-    }
-
-    public void setNumberOfEventsToSubscribeInEachFetchRequest(int numberOfEventsToSubscribeInEachFetchRequest) {
-        this.numberOfEventsToSubscribeInEachFetchRequest = numberOfEventsToSubscribeInEachFetchRequest;
-    }
-
-    public Boolean getProcessChangedFields() {
-        return processChangedFields;
-    }
-
-    public void setProcessChangedFields(Boolean processChangedFields) {
-        this.processChangedFields = processChangedFields;
-    }
 
     public boolean usePlaintextChannel() {
         return plaintextChannel;
@@ -245,21 +223,6 @@ public class ExampleConfigurations {
         this.replayId = replayId;
     }
 
-    public String getManagedSubscriptionId() {
-        return managedSubscriptionId;
-    }
-
-    public void setManagedSubscriptionId(String managedSubscriptionId) {
-        this.managedSubscriptionId = managedSubscriptionId;
-    }
-
-    public String getDeveloperName() {
-        return developerName;
-    }
-
-    public void setDeveloperName(String developerName) {
-        this.developerName = developerName;
-    }
 
     public String getUserId() {
         return userId;
@@ -267,6 +230,30 @@ public class ExampleConfigurations {
 
     public void setUserId(String userId) {
         this.userId = userId;
+    }
+
+    public String getKodyHostname() {
+        return kodyHostname;
+    }
+
+    public void setKodyHostname(String kodyHostname) {
+        this.kodyHostname = kodyHostname;
+    }
+
+    public String getKodyApiKey() {
+        return kodyApiKey;
+    }
+
+    public void setKodyApiKey(String kodyApiKey) {
+        this.kodyApiKey = kodyApiKey;
+    }
+
+    public String getKodyStoreId() {
+        return kodyStoreId;
+    }
+
+    public void setKodyStoreId(String kodyStoreId) {
+        this.kodyStoreId = kodyStoreId;
     }
 
     /**
@@ -289,10 +276,10 @@ public class ExampleConfigurations {
     }
 
     /**
-     * 将 ByteString 类型的 replayId 转换回原来的输入字符串格式。
+     * Converts ByteString type replayId back to the original input string format.
      *
-     * @param replayId 要转换的 ByteString 类型的 replayId
-     * @return 转换后的字符串，格式类似于 "[1, 2, 3]"
+     * @param replayId The ByteString type replayId to convert
+     * @return The converted string, formatted like "[1, 2, 3]"
      */
     public String getReplayIdStringFromByteString(ByteString replayId) {
         StringBuilder sb = new StringBuilder("[");
