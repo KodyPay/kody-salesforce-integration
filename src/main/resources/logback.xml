@@ -4,13 +4,27 @@
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
             <Pattern>
-                %d [%thread] %logger{36} - %msg%n
+                %d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n
             </Pattern>
         </encoder>
     </appender>
 
-    <root level="INFO">
+    <root level="WARN">
         <appender-ref ref="STDOUT" />
     </root>
+
+    <!-- Reduce noise from third-party libraries -->
+    <logger name="io.netty" level="ERROR"/>
+    <logger name="org.eclipse.jetty" level="ERROR"/>
+    <logger name="io.grpc" level="ERROR"/>
+    <logger name="java.lang.Class" level="ERROR"/>
+    <logger name="org.apache.avro" level="ERROR"/>
+    <logger name="com.google" level="ERROR"/>
+
+    <!-- Keep our application loggers at INFO for important events -->
+    <logger name="samples.KodyPaymentPublisher" level="INFO"/>
+    <logger name="kody.integration.KodyPaymentService" level="DEBUG"/>
+    <logger name="kody.integration" level="INFO"/>
+    <logger name="utility.CommonContext" level="WARN"/>
 
 </configuration>

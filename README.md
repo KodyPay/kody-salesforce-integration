@@ -1,68 +1,186 @@
-# Pub/Sub API Java Examples
+# Kody-Salesforce Integration
 
-## Overview
-This directory contains some Java examples that can be used with the Pub/Sub API. These examples range from generic Publish, Subscribe, ManagedSubscribe (beta), processing CustomEventHeaders in change events, and a specific example of updating the Salesforce Account standard object. It is important to note that these examples are not performance tested nor are they production ready. They are meant to be used as a learning resource or a starting point to understand the flows of each of the Remote Procedure Calls (RPCs) of Pub/Sub API. There are some limitations to these examples as well mentioned below.
+Java integration between Salesforce Pub/Sub API and Kody Payment API for real-time payment processing through event-driven architecture.
 
-## Project Structure
-In the `src/main` directory of the project, you will find several sub-directories as follows:
-* `java/`: This directory contains the main source code for all the examples grouped into separate packages:
-  * `genericpubsub/`: This package contains the examples covering the general flows of all RPCs of Pub/Sub API. 
-  * `processchangeeventheader/`: This package contains an example for extracting the changed fields from a bitmap value in a change event.
-  * `utility`: This package contains a list of utility classes used across all the examples. 
-* `proto/` - This directory contains the same `pubsub_api.proto` file found at the root of this repo. The plugin used to generate the sources requires for this proto file to be present in the `src` directory.  
-* `resources/` - This directory contains a list of resources needed for running the examples.
+**Features:**
+- Real-time payment processing via Salesforce Platform Events
+- Complete Kody Payment API integration (InitiatePayment, PaymentDetails, GetPayments, Refund)
+- Pure proxy architecture with enum-based method registry
+- Comprehensive test suite with automated testing
+- Docker deployment ready
 
-## Running the Examples
+## 🚀 Quick Start
+
 ### Prerequisites
-1. Install [Java 11](https://www.oracle.com/java/technologies/javase/jdk11-archive-downloads.html), [Maven](https://maven.apache.org/install.html).
-2. Clone this project.
-3. Run `mvn clean install` from the `java` directory to build the project and generate required sources from the proto file.
-4. The `arguments.yaml` file in the `src/main/resources` sub-directory contains a list of required and optional configurations needed to run the examples. The file contains detailed comments on how to set the configurations.
-5. Get the username, password, and login URL of the Salesforce org you wish to use.
-6. For the examples in `genericpubsub` package, a custom **_Order Event_** [platform event](https://developer.salesforce.com/docs/atlas.en-us.platform_events.meta/platform_events/platform_events_define_ui.htm) has to be created in the Salesforce org. Ensure your `Order Event` platform event matches the following structure:
-   - Standard Fields
-       - Label: `Order Event`
-       - Plural Label: `Order Events`
-   - Custom Fields
-       - `Order Number` (Text, 18)
-       - `City` (Text, 50)
-       - `Amount` (Number, (16,2))
+- Java 21+ and Maven
+- Salesforce org with Pub/Sub API access
+- Kody Payment API credentials
 
-### Execution
-1. Update the configurations in the `src/main/resources/arguments.yaml` file. The required configurations will apply to all the examples and the optional ones depends on which example is being executed. The configurations include:
-   1. Required configurations:
-       * `PUBSUB_HOST`: Specify the Pub/Sub API endpoint to be used.
-       * `PUBSUB_PORT`: Specify the Pub/Sub API port to be used (usually 7443).
-       * `LOGIN_URL`: Specify the login url of the Salesforce org being used to run the examples.
-       * `USERNAME` & `PASSWORD`: For authentication via username and password, you will need to specify the username and password of the Salesforce org. 
-       * `ACCESS_TOKEN` & `TENANT_ID`: For authentication via session token and tenant ID, you will need to specify the sessionToken and tenant ID of the Salesforce org.
-       *  When using managed event subscriptions (beta), one of these configurations is required.
-          * `MANAGED_SUB_DEVELOPER_NAME`: Specify the developer name of ManagedEventSubscription. This parameter is used in ManagedSubscribe.java.
-          * `MANAGED_SUB_ID`: Specify the ID of the ManagedEventSubscription Tooling API record. This parameter is used in ManagedSubscribe.java.
+### Setup
+1. Clone and build: `mvn clean install`
+2. Configure credentials in `config/arguments-sandbox.yaml`
+3. Test: `./run-test.sh sandbox`
 
-   2. Optional Parameters:
-       * `TOPIC`: Specify the topic for which you wish to publish/subscribe. 
-       * `NUMBER_OF_EVENTS_TO_PUBLISH`: Specify the number of events to publish while using the PublishStream RPC.
-       * `SINGLE_PUBLISH_REQUEST`: Specify if you want to publish the events in a single or multiple PublishRequests.
-       * `NUMBER_OF_EVENTS_IN_FETCHREQUEST`: Specify the number of events that the Subscribe RPC requests from the server in each FetchRequest. The example fetches at most 5 events in each Subscribe request. If you pass in more than 5, it sends multiple Subscribe requests with at most 5 events requested in FetchRequest each. For more information about requesting events, see [Pull Subscription and Flow Control](https://developer.salesforce.com/docs/platform/pub-sub-api/guide/flow-control.html) in the Pub/Sub API documentation.
-       * `PROCESS_CHANGE_EVENT_HEADER_FIELDS`: Specify whether the Subscribe or ManagedSubscribe client should process the change data capture event bitmap fields in `ChangeEventHeader`. In this sample, only the `changedFields` field is expanded. To expand the `diffFields` and `nulledFields` header fields, modify the sample code. See [Event Deserialization Considerations](https://developer.salesforce.com/docs/platform/pub-sub-api/guide/event-deserialization-considerations.html).
-       * `REPLAY_PRESET`: Specify the ReplayPreset for subscribe examples.
-         * If a subscription has to be started using the CUSTOM replay preset, the `REPLAY_ID` parameter is mandatory. 
-         * The `REPLAY_ID` is a byte array and must be specified in this format: `[<byte_values_separated_by_commas>]`. Please enter the values as is within the square brackets and without any quotes. 
-         * Example: `[0, 1, 2, 3, 4, -5, 6, 7, -8]`
-       
-2. After setting up the configurations, any example can be executed using the `./run.sh` file available at the parent directory.
-   * Format for running the examples: `./run.sh <package_name>.<example_class_name>`
-   * Example: `./run.sh genericpubsub.PublishStream`
+## 🔧 Salesforce Setup
 
-## Implementation
-- This repo can be used as a reference point for clients looking to create a Java app to integrate with Pub/Sub API. Note that the project structure and the examples included in this repo are intended for demo purposes only and clients are free to implement their own Java apps in any way they see fit.
-- The Generic Subscribe and ManagedSubscribe (beta) RPC examples create a long-lived subscription. After all requested events are received, Subscribe sends a new `FetchRequest` and ManagedSubscribe sends a new `ManagedFetchRequest` to keep the subscription alive and the client listening to new events.
-- The Generic Subscribe and ManagedSubscribe (beta) RPC examples demonstrate a basic flow control strategy where a new `FetchRequest` or `ManagedFetchRequest` is sent only after the requested number of events in the previous requests are received. The ManagedSubscribe RPC example also shows how to commit a Replay ID by sending commit requests. Custom flow control strategies can be implemented as needed. More info on flow control available [here](https://developer.salesforce.com/docs/platform/pub-sub-api/guide/flow-control.html).
-- The Generic Subscribe RPC example demonstrates error handling. After an exception occurs, it attempts to resubscribe after the last received event by implementing Binary Exponential Backoff. The example processes events and sends the retry requests asynchronously. If the error is an invalid replay ID,  it tries to resubscribe since the earliest stored event in the event bus. See the `onError()` method in `Subscribe.java`.
+Create Platform Event `KodyPayment__e` with these fields:
 
-# Limitations
-1. No guarantees that streams will remain open with `PublishStream` examples - Pub/Sub API has idle timeouts and will close idle streams. If a stream is closed while running these examples, you will most likely need to stop and restart.
-2. No support for republishing on error - If an error occurs while publishing the relevant examples will surface the error but will not attempt to republish the event.
-3. No security guarantees - Teams using these examples for reference will need to do their own security audits to ensure the dependencies introduced here can be safely used.
-4. No performance testing - These examples have not been perf tested.
+| Field Label | API Name | Data Type | Length |
+|-------------|----------|-----------|---------|
+| `correlation_id` | `correlation_id__c` | Text | 255 |
+| `method` | `method__c` | Text | 255 |
+| `payload` | `payload__c` | Long Text Area | 131072 |
+| `api_key` | `api_key__c` | Text | 255 |
+
+**Permissions needed:**
+- View All Data, Modify All Data, API Enabled
+- Access to KodyPayment Platform Event
+
+## 🧪 Testing
+
+### Automated Testing
+```bash
+./run-test.sh sandbox                    # Test all APIs
+```
+
+### Manual Testing
+**Terminal 1 - Start Service:**
+```bash
+./run.sh kody.integration.KodyPaymentService sandbox
+```
+
+**Terminal 2 - Send Requests:**
+```bash
+# InitiatePayment
+./run.sh samples.KodyPaymentPublisher sandbox request.ecom.v1.InitiatePayment '{
+  "storeId": "your-store-id",
+  "paymentReference": "pay_123456",
+  "amountMinorUnits": 1000,
+  "currency": "GBP",
+  "orderId": "order_123456",
+  "returnUrl": "https://example.com/return",
+  "payerEmailAddress": "test@example.com"
+}' 'your-api-key'
+
+# PaymentDetails (use payment ID from above)
+./run.sh samples.KodyPaymentPublisher sandbox request.ecom.v1.PaymentDetails '{
+  "storeId": "your-store-id",
+  "paymentId": "P._pay.ABC123XYZ"
+}' 'your-api-key'
+
+# GetPayments
+./run.sh samples.KodyPaymentPublisher sandbox request.ecom.v1.GetPayments '{
+  "storeId": "your-store-id",
+  "pageCursor": {"page": 1, "pageSize": 10}
+}' 'your-api-key'
+
+# Refund
+./run.sh samples.KodyPaymentPublisher sandbox request.ecom.v1.Refund '{
+  "storeId": "your-store-id",
+  "paymentId": "P._pay.ABC123XYZ",
+  "amount": "10.00",
+  "reason": "Customer request"
+}' 'your-api-key'
+```
+
+## 📋 Supported APIs
+
+| API | Purpose | Required Fields |
+|-----|---------|----------------|
+| **InitiatePayment** | Creates new payment requests | `storeId`, `paymentReference`, `amountMinorUnits`, `currency` |
+| **PaymentDetails** | Retrieves payment information by ID | `storeId`, `paymentId` |
+| **GetPayments** | Lists payments with pagination | `storeId`, `pageCursor` |
+| **Refund** | Processes payment refunds | `storeId`, `paymentId`, `amount` |
+
+## 🏗️ Architecture
+
+### Core Components
+
+| Component | Purpose | File |
+|-----------|---------|------|
+| **KodyPaymentService** | Real-time payment processor with enum-based method registry | `KodyPaymentService.java` |
+| **KodyPaymentPublisher** | Testing & integration tool | `samples/KodyPaymentPublisher.java` |
+| **ApplicationConfig** | Configuration manager | `utility/ApplicationConfig.java` |
+| **Test Suite** | Quality assurance (Manual, Quick, Integration tests) | `test/kody/integration/*.java` |
+
+### Pure Proxy Architecture
+
+**Flow**: `Salesforce Platform Event → KodyPaymentService → Kody Payment API → Response Event`
+
+**Key Principles:**
+- 🔐 **Security First**: API keys in each Platform Event (`api_key__c`)
+- 🏪 **Multi-tenant Ready**: Store IDs in every JSON payload
+- ⚡ **Zero Configuration**: No runtime credential injection
+- 🧪 **Test-Friendly**: Config only for automated testing
+
+### Functional Method Registry
+
+Uses **PaymentMethod enum** to eliminate duplicate code:
+
+```java
+public enum PaymentMethod {
+    INITIATE_PAYMENT("request.ecom.v1.InitiatePayment", "response.ecom.v1.InitiatePayment"),
+    PAYMENT_DETAILS("request.ecom.v1.PaymentDetails", "response.ecom.v1.PaymentDetails"),
+    GET_PAYMENTS("request.ecom.v1.GetPayments", "response.ecom.v1.GetPayments"),
+    REFUND("request.ecom.v1.Refund", "response.ecom.v1.Refund");
+}
+```
+
+**Benefits:**
+- 🎯 **Single Point of Truth** - All methods defined in one enum
+- 🔧 **Easy Extensions** - Add new APIs by updating enum only  
+- 🛡️ **Type Safety** - Compile-time validation
+- 📊 **Better Observability** - Runtime method listing
+- 🐛 **Improved Debugging** - Clear error messages
+
+## ⚙️ Configuration
+
+Configure in `config/arguments-sandbox.yaml`:
+
+```yaml
+# Salesforce
+LOGIN_URL: https://your-org.sandbox.my.salesforce.com
+USERNAME: your-username@example.com
+PASSWORD: your-password-plus-security-token
+
+# Kody Payment
+KODY_HOSTNAME: grpc-staging-ap.kodypay.com
+KODY_API_KEY: your-api-key
+KODY_STORE_ID: your-store-id  # Used for testing only
+```
+
+## 🐳 Docker Deployment
+
+```bash
+./docker-build.sh              # Build image
+./docker-run.sh                # Start service
+docker-compose logs -f         # View logs
+docker-compose down            # Stop service
+```
+
+## 🔧 Project Structure
+
+```
+src/
+├── main/java/
+│   ├── kody/integration/KodyPaymentService.java      # Main service
+│   ├── samples/KodyPaymentPublisher.java             # Sample publisher
+│   └── utility/ApplicationConfig.java                # Configuration
+└── test/java/kody/integration/
+    ├── KodyPaymentManualTest.java                     # Full integration test
+    ├── KodyPaymentQuickTest.java                      # Individual API test
+    └── KodyPaymentIntegrationTest.java                # JUnit test
+```
+
+## 🔧 Troubleshooting
+
+**Common Issues:**
+- **gRPC errors**: Run `mvn clean install` to rebuild dependencies
+- **API errors** (`PERMISSION_DENIED`, `INVALID_ARGUMENT`): Expected with demo credentials - confirms integration works
+- **Service hangs**: Normal behavior - runs continuously listening for events
+
+## 🤝 Contributing
+
+1. Run tests before changes: `./run-test.sh sandbox`
+2. Follow Maven conventions
+3. Configuration externalized in YAML files

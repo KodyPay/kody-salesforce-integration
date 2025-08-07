@@ -23,10 +23,10 @@ public class ReplayIdParser {
     }
 
     /**
-     * 将 ByteString 类型的 replayId 转换回原来的输入字符串格式。
+     * Converts ByteString type replayId back to the original input string format.
      *
-     * @param replayId 要转换的 ByteString 类型的 replayId
-     * @return 转换后的字符串，格式类似于 "[1, 2, 3]"
+     * @param replayId The ByteString type replayId to convert
+     * @return The converted string, formatted like "[1, 2, 3]"
      */
     public static String getReplayIdStringFromByteString(ByteString replayId) {
         StringBuilder sb = new StringBuilder("[");
