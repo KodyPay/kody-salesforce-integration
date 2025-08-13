@@ -508,24 +508,25 @@ public class KodyPaymentPublisher extends CommonContext {
     }
 
     public static void main(String[] args) {
-        if (args.length < 5) {
-            logger.error("❌ Usage: ./run.sh genericpubsub.KodyPaymentPublisher <environment> <method> '<json_payload>' <api_key>");
+        if (args.length < 4) {
+            logger.error("❌ Usage: ./run.sh samples.KodyPaymentPublisher <environment> <method> '<json_payload>' <api_key>");
             logger.error("   Examples:");
             logger.error("     # Pure proxy mode - API key required");
-            logger.error("     ./run.sh genericpubsub.KodyPaymentPublisher sandbox request.ecom.v1.InitiatePayment '{\"storeId\":\"123\",\"amount\":1000}' 'your-api-key'");
+            logger.error("     ./run.sh samples.KodyPaymentPublisher sandbox request.ecom.v1.InitiatePayment '{\"storeId\":\"123\",\"amount\":1000}' 'your-api-key'");
+            logger.error("     ./run.sh samples.KodyPaymentPublisher sandbox request.ecom.v1.InitiatePaymentStream '{\"storeId\":\"...\"}' 'your-api-key'");
             return;
         }
 
-        String environment = args[1];
-        String method = args[2];
-        String payload = args[3];
-        String customApiKey = args[4];
+        String environment = args[0];
+        String method = args[1];
+        String payload = args[2];
+        String customApiKey = args[3];
 
         logger.info("🚀 Starting Kody Payment Publisher for environment: {} with method: {}", environment, method);
         logger.info("🔑 Using API key: {}***", customApiKey.substring(0, Math.min(8, customApiKey.length())));
 
         try {
-            ApplicationConfig config = new ApplicationConfig("arguments-" + environment + ".yaml");
+            ApplicationConfig config = ApplicationConfig.createWithEnvironmentFirst(environment);
 
             KodyPaymentPublisher publisher = new KodyPaymentPublisher(config);
             logger.info("✅ Publisher initialized with response subscription");

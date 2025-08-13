@@ -1,20 +1,28 @@
 services:
-  kody-integration:
-    build: .
-    container_name: kody-integration
+  kody-payment-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kody-payment-integration
     restart: unless-stopped
     environment:
+      # Java Options (can be overridden)
       - JAVA_OPTS=-Xmx512m -XX:+UseContainerSupport
+    env_file:
+      # Load environment file (use ENVIRONMENT variable to select)
+      - .env.${ENVIRONMENT:-sandbox}
     volumes:
-      # Mount your configuration file
-      - ./config/arguments-sandbox.yaml:/app/config/arguments-sandbox.yaml:ro
+      # Mount config directory as fallback for YAML files
+      - ./config:/app/config:ro
       # Persist logs
       - ./logs:/app/logs
     ports:
       - "8080:8080"  # For health checks/monitoring if needed
-    command: ["java", "-cp", "app.jar", "kody.integration.KodyPaymentService", "sandbox"]
+    networks:
+      - kody-network
+    command: ["java", "-cp", "/app/app.jar", "kody.integration.KodyPaymentService", "sandbox"]
     healthcheck:
-      test: ["CMD", "pgrep", "-f", "java.*app.jar"]
+      test: ["CMD", "pgrep", "-f", "java.*KodyPaymentService"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -23,3 +31,26 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    
+  kody-quick-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: kody-payment-test
+    environment:
+      # Java Options (can be overridden)
+      - JAVA_OPTS=-Xmx512m -XX:+UseContainerSupport
+    env_file:
+      - .env.${ENVIRONMENT:-sandbox}
+    volumes:
+      - ./config:/app/config:ro
+      - ./logs:/app/logs
+    networks:
+      - kody-network
+    profiles:
+      - test
+    command: ["java", "-cp", "/app/app.jar", "kody.integration.KodyPaymentQuickTest", "sandbox"]
+
+networks:
+  kody-network:
+    driver: bridge

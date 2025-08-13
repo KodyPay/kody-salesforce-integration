@@ -725,20 +725,18 @@ public class KodyPaymentService extends CommonContext {
     }
 
     public static void main(String[] args) {
-        System.out.println("🔧 DEBUG: Main method started");
         if (args.length < 1) {
-            System.out.println("🔧 DEBUG: No arguments provided");
             logger.error("❌ Usage: java -cp app.jar kody.integration.KodyPaymentService sandbox");
             logger.error("   Or: ./run.sh kody.integration.KodyPaymentService sandbox");
             return;
         }
 
         String environment = args[0];
-        System.out.println("🔧 DEBUG: Environment: " + environment);
         logger.info("🚀 Starting Kody Payment Subscriber for environment: {}", environment);
 
         try {
-            ApplicationConfig config = new ApplicationConfig("arguments-" + environment + ".yaml");
+            // Use environment-first configuration loading
+            ApplicationConfig config = ApplicationConfig.createWithEnvironmentFirst(environment);
 
             try (KodyPaymentService subscriber = new KodyPaymentService(config)) {
                 subscriber.subscribeAndProcessPayments();

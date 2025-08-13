@@ -1,49 +1,42 @@
 #!/bin/bash
 
-# Docker run script for Kody-Salesforce Integration
-set -e
+# Docker run script with environment variable support
+# Usage: ./docker-run.sh [environment]
+# Examples:
+#   ./docker-run.sh sandbox
+#   ./docker-run.sh production
+#   ENVIRONMENT=sandbox ./docker-run.sh
 
-# Check if config directory exists
-if [ ! -d "config" ]; then
-    echo "📁 Creating config directory..."
-    mkdir -p config
-fi
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
 
-# Check if configuration file exists
-if [ ! -f "config/arguments-sandbox.yaml" ]; then
-    echo "⚠️  Configuration file not found!"
-    echo "📋 Setting up configuration template..."
-    
-    # Create config directory and copy template
-    cp src/main/resources/arguments-sandbox.yaml config/arguments-sandbox.yaml
-    
-    echo "✅ Configuration template created at: config/arguments-sandbox.yaml"
+ENVIRONMENT=${1:-${ENVIRONMENT:-sandbox}}
+
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "${GREEN}🐳 Docker: Starting Kody Payment Integration${NC}"
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "  Environment: ${GREEN}$ENVIRONMENT${NC}"
+
+# Check if environment file exists
+ENV_FILE=".env.$ENVIRONMENT"
+if [ ! -f "$ENV_FILE" ]; then
+    echo -e "${RED}❌ Environment file not found: $ENV_FILE${NC}"
+    echo -e "${YELLOW}Available environment files:${NC}"
+    ls -1 .env.* 2>/dev/null || echo "  No .env files found"
     echo ""
-    echo "🔧 Please edit config/arguments-sandbox.yaml with your credentials:"
-    echo "   - KODY_HOSTNAME"
-    echo "   - KODY_API_KEY" 
-    echo "   - KODY_STORE_ID"
-    echo "   - Salesforce USERNAME/PASSWORD"
-    echo ""
-    echo "Then run this script again."
+    echo -e "${YELLOW}To create one, copy from example:${NC}"
+    echo "  cp .env.${ENVIRONMENT}.example $ENV_FILE"
+    echo "  # Edit $ENV_FILE with your configuration"
     exit 1
 fi
 
-# Create logs directory
-mkdir -p logs
+echo -e "  Config File: ${GREEN}$ENV_FILE${NC}"
+echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
-echo "🐳 Starting Kody-Salesforce Integration..."
-echo "📊 Configuration: config/arguments-sandbox.yaml"
-echo "📝 Logs will be in: logs/"
-echo ""
-
-# Start the service
-docker-compose up -d
-
-echo "✅ Service started successfully!"
-echo ""
-echo "🔍 Useful commands:"
-echo "  docker-compose logs -f        # View live logs"
-echo "  docker-compose ps             # Check service status"
-echo "  docker-compose down           # Stop the service"
-echo "  docker-compose restart        # Restart the service"
+# Build and run with Docker Compose
+export ENVIRONMENT
+docker-compose up --build kody-payment-service
