@@ -108,6 +108,36 @@ public class KodyPaymentIntegrationTest {
 
     @Test
     @Order(2)
+    @DisplayName("Test InitiatePaymentStream API")
+    void testInitiatePaymentStream() throws Exception {
+        logger.info("🧪 Testing InitiatePaymentStream API");
+
+        String correlationId = UUID.randomUUID().toString();
+        String method = "request.ecom.v1.InitiatePaymentStream";
+        String payload = "{\n" +
+                "  \"storeId\": \"" + config.getKodyStoreId() + "\",\n" +
+                "  \"paymentReference\": \"pay_stream_test_" + System.currentTimeMillis() + "\",\n" +
+                "  \"amountMinorUnits\": 1500,\n" +
+                "  \"currency\": \"GBP\",\n" +
+                "  \"orderId\": \"order_stream_test_" + System.currentTimeMillis() + "\",\n" +
+                "  \"returnUrl\": \"https://example.com/return\",\n" +
+                "  \"payerEmailAddress\": \"streamtest@example.com\"\n" +
+                "}";
+
+        KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponseWithCustomApiKey(
+                correlationId, method, payload, config.getKodyApiKey(), 30);
+
+        Assertions.assertNotNull(response, "Response should not be null");
+        Assertions.assertEquals(correlationId, response.getCorrelationId(), "Correlation ID should match");
+        Assertions.assertEquals("response.ecom.v1.InitiatePaymentStream", response.getMethod(), "Response method should match");
+        Assertions.assertNotNull(response.getPayload(), "Response payload should not be null");
+
+        logger.info("✅ InitiatePaymentStream test completed successfully");
+        logger.info("📦 Response: {}", response.getPayload());
+    }
+
+    @Test
+    @Order(3)
     @DisplayName("Test PaymentDetails API")
     void testPaymentDetails() throws Exception {
         logger.info("🧪 Testing PaymentDetails API");
@@ -132,7 +162,7 @@ public class KodyPaymentIntegrationTest {
     }
 
     @Test
-    @Order(3)
+    @Order(4)
     @DisplayName("Test GetPayments API")
     void testGetPayments() throws Exception {
         logger.info("🧪 Testing GetPayments API");
@@ -160,7 +190,7 @@ public class KodyPaymentIntegrationTest {
     }
 
     @Test
-    @Order(4)
+    @Order(5)
     @DisplayName("Test Refund API")
     void testRefund() throws Exception {
         logger.info("🧪 Testing Refund API");
@@ -186,7 +216,7 @@ public class KodyPaymentIntegrationTest {
     }
 
     @Test
-    @Order(5)
+    @Order(6)
     @DisplayName("Test Error Handling - Invalid Method")
     void testErrorHandling() throws Exception {
         logger.info("🧪 Testing Error Handling with invalid method");
@@ -209,7 +239,7 @@ public class KodyPaymentIntegrationTest {
     }
 
     @Test
-    @Order(6)
+    @Order(7)
     @DisplayName("Test Multiple Concurrent Requests")
     void testConcurrentRequests() throws Exception {
         logger.info("🧪 Testing multiple concurrent requests");
@@ -260,7 +290,7 @@ public class KodyPaymentIntegrationTest {
     }
 
     @Test
-    @Order(7)
+    @Order(8)
     @DisplayName("Test Configuration Validation")
     void testConfigurationValidation() {
         logger.info("🧪 Testing configuration validation");

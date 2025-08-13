@@ -23,9 +23,10 @@ public class KodyPaymentQuickTest {
     public static void main(String[] args) {
         if (args.length < 2) {
             logger.error("❌ Usage: ./run.sh genericpubsub.KodyPaymentQuickTest <environment> <api> [paymentId]");
-            logger.error("   APIs: request.ecom.v1.InitiatePayment, request.ecom.v1.PaymentDetails, request.ecom.v1.GetPayments, request.ecom.v1.Refund");
+            logger.error("   APIs: request.ecom.v1.InitiatePayment, request.ecom.v1.InitiatePaymentStream, request.ecom.v1.PaymentDetails, request.ecom.v1.GetPayments, request.ecom.v1.Refund");
             logger.error("   Examples:");
             logger.error("     ./run.sh genericpubsub.KodyPaymentQuickTest sandbox request.ecom.v1.InitiatePayment");
+            logger.error("     ./run.sh genericpubsub.KodyPaymentQuickTest sandbox request.ecom.v1.InitiatePaymentStream");
             logger.error("     ./run.sh genericpubsub.KodyPaymentQuickTest sandbox request.ecom.v1.PaymentDetails test-payment-123");
             logger.error("     ./run.sh genericpubsub.KodyPaymentQuickTest sandbox request.ecom.v1.GetPayments");
             logger.error("     ./run.sh genericpubsub.KodyPaymentQuickTest sandbox request.ecom.v1.Refund test-payment-123");
@@ -73,6 +74,10 @@ public class KodyPaymentQuickTest {
                 case "request.ecom.v1.initiatepayment":
                     success = testInitiatePayment(publisher);
                     break;
+                case "initiatepaymentstream":
+                case "request.ecom.v1.initiatepaymentstream":
+                    success = testInitiatePaymentStream(publisher);
+                    break;
                 case "paymentdetails":
                 case "request.ecom.v1.paymentdetails":
                     if (paymentId == null) {
@@ -104,7 +109,7 @@ public class KodyPaymentQuickTest {
                     }
                     break;
                 default:
-                    logger.error("❌ Unsupported API: {}. Use: request.ecom.v1.InitiatePayment, request.ecom.v1.PaymentDetails, request.ecom.v1.GetPayments, or request.ecom.v1.Refund", api);
+                    logger.error("❌ Unsupported API: {}. Use: request.ecom.v1.InitiatePayment, request.ecom.v1.InitiatePaymentStream, request.ecom.v1.PaymentDetails, request.ecom.v1.GetPayments, or request.ecom.v1.Refund", api);
                     return;
             }
 
@@ -162,6 +167,43 @@ public class KodyPaymentQuickTest {
 
         } catch (Exception e) {
             logger.error("❌ InitiatePayment test failed", e);
+            return false;
+        }
+    }
+
+    private static boolean testInitiatePaymentStream(KodyPaymentPublisher publisher) {
+        logger.info("💳 Testing InitiatePaymentStream API...");
+        try {
+            String correlationId = UUID.randomUUID().toString();
+            String method = "request.ecom.v1.InitiatePaymentStream";
+            ApplicationConfig config = new ApplicationConfig("arguments-sandbox.yaml");
+            String payload = "{\n" +
+                    "  \"storeId\": \"" + config.getKodyStoreId() + "\",\n" +
+                    "  \"paymentReference\": \"pay_stream_test_" + System.currentTimeMillis() + "\",\n" +
+                    "  \"amountMinorUnits\": 2500,\n" +
+                    "  \"currency\": \"GBP\",\n" +
+                    "  \"orderId\": \"order_stream_test_" + System.currentTimeMillis() + "\",\n" +
+                    "  \"returnUrl\": \"https://example.com/return\",\n" +
+                    "  \"payerEmailAddress\": \"streamtest@example.com\"\n" +
+                    "}";
+
+            logger.info("📤 Sending stream request...");
+            KodyPaymentPublisher.PaymentResponse response = publisher.sendPaymentRequestAndWaitForResponseWithCustomApiKey(
+                    correlationId, method, payload, config.getKodyApiKey(), 45);
+
+            if (response != null) {
+                logger.info("📦 Stream response received:");
+                logger.info("   🆔 Correlation ID: {}", response.getCorrelationId());
+                logger.info("   🔧 Method: {}", response.getMethod());
+                logger.info("   📋 Payload: {}", response.getPayload());
+                return true;
+            } else {
+                logger.error("❌ No stream response received");
+                return false;
+            }
+
+        } catch (Exception e) {
+            logger.error("❌ InitiatePaymentStream test failed", e);
             return false;
         }
     }
