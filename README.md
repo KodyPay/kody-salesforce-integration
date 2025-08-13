@@ -18,7 +18,7 @@ Java integration between Salesforce Pub/Sub API and Kody Payment API for real-ti
 
 ### Setup
 1. Clone and build: `mvn clean install`
-2. Configure credentials in `config/arguments-sandbox.yaml`
+2. Configure credentials: `cp .env.sandbox.example .env.sandbox`
 3. Test: `./run-test.sh sandbox`
 
 ## 🔧 Salesforce Setup
@@ -135,25 +135,30 @@ public enum PaymentMethod {
 
 ## ⚙️ Configuration
 
-Configure in `config/arguments-sandbox.yaml`:
+The service uses environment variables for configuration. Create a `.env.sandbox` file from the example:
 
-```yaml
+```bash
+cp .env.sandbox.example .env.sandbox
+# Edit .env.sandbox with your credentials
+```
+
+Required environment variables:
+```bash
 # Salesforce
-LOGIN_URL: https://your-org.sandbox.my.salesforce.com
-USERNAME: your-username@example.com
-PASSWORD: your-password-plus-security-token
+LOGIN_URL=https://your-org.sandbox.my.salesforce.com
+USERNAME=your-username@example.com
+PASSWORD=your-password-plus-security-token
+TOPIC=/event/KodyPayment__e
 
 # Kody Payment
-KODY_HOSTNAME: grpc-staging-ap.kodypay.com
-KODY_API_KEY: your-api-key
-KODY_STORE_ID: your-store-id  # Used for testing only
+KODY_HOSTNAME=grpc-staging-ap.kodypay.com
 ```
 
 ## 🐳 Docker Deployment
 
 ```bash
 ./docker-build.sh              # Build image
-./docker-run.sh                # Start service
+./docker-run.sh sandbox        # Start service with environment
 docker-compose logs -f         # View logs
 docker-compose down            # Stop service
 ```
@@ -183,4 +188,4 @@ src/
 
 1. Run tests before changes: `./run-test.sh sandbox`
 2. Follow Maven conventions
-3. Configuration externalized in YAML files
+3. Configuration externalized in environment files

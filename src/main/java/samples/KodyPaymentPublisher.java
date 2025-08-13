@@ -20,6 +20,7 @@ import utility.ApplicationConfig;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -41,6 +42,8 @@ public class KodyPaymentPublisher extends CommonContext {
     private final String kodyApiKey;
     private final Map<String, CountDownLatch> pendingRequests = new ConcurrentHashMap<>();
     private final Map<String, PaymentResponse> responses = new ConcurrentHashMap<>();
+    private final Map<String, List<PaymentResponse>> streamingResponses = new ConcurrentHashMap<>();
+    private final Map<String, CountDownLatch> streamingLatches = new ConcurrentHashMap<>();
     private volatile boolean responseSubscriberRunning = false;
     private StreamObserver<FetchRequest> responseStream;
 
@@ -91,6 +94,12 @@ public class KodyPaymentPublisher extends CommonContext {
     }
 
     public PaymentResponse sendPaymentRequestAndWaitForResponseWithCustomApiKey(String correlationId, String method, String payload, String apiKey, int timeoutSeconds) throws Exception {
+        // Check if this is a streaming method
+        if (method != null && method.contains("Stream")) {
+            logger.info("🌊 Detected streaming method: {} - waiting for multiple responses", method);
+            return sendStreamingPaymentRequestWithCustomApiKey(correlationId, method, payload, apiKey, timeoutSeconds);
+        }
+        
         CountDownLatch responseLatch = new CountDownLatch(1);
         pendingRequests.put(correlationId, responseLatch);
 
@@ -111,6 +120,82 @@ public class KodyPaymentPublisher extends CommonContext {
             }
         } finally {
             pendingRequests.remove(correlationId);
+            responses.remove(correlationId);
+        }
+    }
+
+    /**
+     * Special handler for streaming payment methods (e.g., InitiatePaymentStream)
+     * Waits for multiple responses with the same correlation ID until payment is completed
+     */
+    private PaymentResponse sendStreamingPaymentRequestWithCustomApiKey(String correlationId, String method, String payload, String apiKey, int timeoutSeconds) throws Exception {
+        // Initialize collection for streaming responses
+        List<PaymentResponse> allResponses = new ArrayList<>();
+        streamingResponses.put(correlationId, allResponses);
+        
+        // Use a special latch for streaming - we don't know exact count, so we'll use timeout
+        CountDownLatch firstResponseLatch = new CountDownLatch(1);
+        pendingRequests.put(correlationId, firstResponseLatch);
+
+        try {
+            logger.info("🌊 Sending streaming payment request - Correlation: {}, Method: {}, Timeout: {}s", 
+                correlationId, method, timeoutSeconds);
+
+            publishPaymentRequestWithCustomApiKey(correlationId, method, payload, apiKey);
+            
+            // Wait for first response to ensure stream started
+            if (!firstResponseLatch.await(10, TimeUnit.SECONDS)) {
+                throw new RuntimeException("No initial response received after 10 seconds");
+            }
+            
+            logger.info("📦 First response received, continuing to listen for updates...");
+            
+            // Continue collecting responses until we see a terminal state or timeout
+            long endTime = System.currentTimeMillis() + (timeoutSeconds * 1000L);
+            PaymentResponse lastResponse = null;
+            boolean isComplete = false;
+            
+            while (System.currentTimeMillis() < endTime && !isComplete) {
+                Thread.sleep(1000); // Check every second
+                
+                List<PaymentResponse> currentResponses = streamingResponses.get(correlationId);
+                if (currentResponses != null && !currentResponses.isEmpty()) {
+                    lastResponse = currentResponses.get(currentResponses.size() - 1);
+                    
+                    // Check if payment reached terminal state
+                    String responsePayload = lastResponse.getPayload();
+                    if (responsePayload != null) {
+                        // Check for successful payment completion indicators
+                        if (responsePayload.contains("\"status\":\"COMPLETED\"") || 
+                            responsePayload.contains("\"status\":\"SUCCESS\"") ||
+                            responsePayload.contains("\"paid\":true") ||
+                            responsePayload.contains("PAYMENT_CONFIRMED")) {
+                            logger.info("✅ Payment completed successfully!");
+                            isComplete = true;
+                        } else if (responsePayload.contains("\"status\":\"FAILED\"") || 
+                                 responsePayload.contains("\"status\":\"CANCELLED\"")) {
+                            logger.warn("❌ Payment failed or cancelled");
+                            isComplete = true;
+                        }
+                    }
+                    
+                    // Log the full payload for stream updates
+                    logger.info("📊 Stream update #{}: {}", currentResponses.size(), lastResponse.getPayload());
+                }
+            }
+            
+            List<PaymentResponse> finalResponses = streamingResponses.get(correlationId);
+            if (finalResponses != null && !finalResponses.isEmpty()) {
+                logger.info("🎉 Stream completed with {} total responses", finalResponses.size());
+                // Return the last response which should have the final state
+                return finalResponses.get(finalResponses.size() - 1);
+            } else {
+                throw new RuntimeException("No responses received from stream");
+            }
+            
+        } finally {
+            pendingRequests.remove(correlationId);
+            streamingResponses.remove(correlationId);
             responses.remove(correlationId);
         }
     }
@@ -246,22 +331,43 @@ public class KodyPaymentPublisher extends CommonContext {
             String payload = extractFieldAsString(record, "payload__c");
 
             boolean isPendingRequest = pendingRequests.containsKey(correlationId);
+            boolean isStreamingRequest = streamingResponses.containsKey(correlationId);
             boolean isResponseMethod = method != null && method.startsWith("response.");
 
-            logger.info("🔍 isPending: {}, isResponse: {}", isPendingRequest, isResponseMethod);
+            logger.info("🔍 isPending: {}, isStreaming: {}, isResponse: {}", isPendingRequest, isStreamingRequest, isResponseMethod);
 
-            if (isPendingRequest && isResponseMethod) {
+            if ((isPendingRequest || isStreamingRequest) && isResponseMethod) {
                 logger.info("🎉 Found matching response - Correlation: {}", correlationId);
 
                 PaymentResponse response = new PaymentResponse(correlationId, method, payload);
+                
+                // Handle streaming responses
+                if (isStreamingRequest) {
+                    List<PaymentResponse> streamResponses = streamingResponses.get(correlationId);
+                    if (streamResponses != null) {
+                        streamResponses.add(response);
+                        logger.info("📊 Added streaming response #{} for correlation: {}", 
+                            streamResponses.size(), correlationId);
+                    }
+                }
+                
+                // Also store in regular responses map
                 responses.put(correlationId, response);
 
+                // Count down the latch for first response
                 CountDownLatch latch = pendingRequests.get(correlationId);
-                if (latch != null) {
+                if (latch != null && latch.getCount() > 0) {
                     latch.countDown();
                 }
+                
+                // Count down streaming latch if exists
+                CountDownLatch streamLatch = streamingLatches.get(correlationId);
+                if (streamLatch != null && streamLatch.getCount() > 0) {
+                    streamLatch.countDown();
+                }
             } else {
-                logger.info("ℹ️ Ignoring event - isPending: {}, isResponse: {}", isPendingRequest, isResponseMethod);
+                logger.info("ℹ️ Ignoring event - isPending: {}, isStreaming: {}, isResponse: {}", 
+                    isPendingRequest, isStreamingRequest, isResponseMethod);
             }
 
         } catch (Exception e) {
@@ -402,24 +508,25 @@ public class KodyPaymentPublisher extends CommonContext {
     }
 
     public static void main(String[] args) {
-        if (args.length < 5) {
-            logger.error("❌ Usage: ./run.sh genericpubsub.KodyPaymentPublisher <environment> <method> '<json_payload>' <api_key>");
+        if (args.length < 4) {
+            logger.error("❌ Usage: ./run.sh samples.KodyPaymentPublisher <environment> <method> '<json_payload>' <api_key>");
             logger.error("   Examples:");
             logger.error("     # Pure proxy mode - API key required");
-            logger.error("     ./run.sh genericpubsub.KodyPaymentPublisher sandbox request.ecom.v1.InitiatePayment '{\"storeId\":\"123\",\"amount\":1000}' 'your-api-key'");
+            logger.error("     ./run.sh samples.KodyPaymentPublisher sandbox request.ecom.v1.InitiatePayment '{\"storeId\":\"123\",\"amount\":1000}' 'your-api-key'");
+            logger.error("     ./run.sh samples.KodyPaymentPublisher sandbox request.ecom.v1.InitiatePaymentStream '{\"storeId\":\"...\"}' 'your-api-key'");
             return;
         }
 
-        String environment = args[1];
-        String method = args[2];
-        String payload = args[3];
-        String customApiKey = args[4];
+        String environment = args[0];
+        String method = args[1];
+        String payload = args[2];
+        String customApiKey = args[3];
 
         logger.info("🚀 Starting Kody Payment Publisher for environment: {} with method: {}", environment, method);
         logger.info("🔑 Using API key: {}***", customApiKey.substring(0, Math.min(8, customApiKey.length())));
 
         try {
-            ApplicationConfig config = new ApplicationConfig("arguments-" + environment + ".yaml");
+            ApplicationConfig config = ApplicationConfig.createWithEnvironmentFirst(environment);
 
             KodyPaymentPublisher publisher = new KodyPaymentPublisher(config);
             logger.info("✅ Publisher initialized with response subscription");

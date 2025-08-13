@@ -56,6 +56,12 @@ public class KodyPaymentService extends CommonContext {
             PaymentInitiationRequest.newBuilder(),
             (service, request, apiKey) -> service.callKodyInitiatePayment((PaymentInitiationRequest) request, apiKey)
         ),
+        INITIATE_PAYMENT_STREAM(
+                "request.ecom.v1.InitiatePaymentStream",
+                "response.ecom.v1.InitiatePaymentStream",
+                PaymentInitiationRequest.newBuilder(),
+                (service, request, apiKey) -> service.callKodyInitiatePaymentStream((PaymentInitiationRequest) request, apiKey)
+        ),
         PAYMENT_DETAILS(
             "request.ecom.v1.PaymentDetails", 
             "response.ecom.v1.PaymentDetails",
@@ -328,8 +334,13 @@ public class KodyPaymentService extends CommonContext {
 
             logger.info("💳 Processing method: {} → {}", paymentMethod.getRequestMethod(), paymentMethod.getResponseMethod());
             
-            String responseJson = processPaymentMethod(paymentMethod, payloadJson, apiKey);
-            publishResponse(correlationId, paymentMethod.getResponseMethod(), responseJson);
+            // Special handling for streaming methods
+            if (method.equals("request.ecom.v1.InitiatePaymentStream")) {
+                processPaymentStream(paymentMethod, payloadJson, apiKey, correlationId);
+            } else {
+                String responseJson = processPaymentMethod(paymentMethod, payloadJson, apiKey);
+                publishResponse(correlationId, paymentMethod.getResponseMethod(), responseJson);
+            }
 
         } catch (Exception e) {
             logger.error("❌ Error processing request", e);
@@ -356,6 +367,31 @@ public class KodyPaymentService extends CommonContext {
         logger.info("📦 Response: {}", responseJson);
         
         return responseJson;
+    }
+
+    /**
+     * Process streaming payment methods - handles continuous stream of responses
+     */
+    private void processPaymentStream(PaymentMethod paymentMethod, JsonNode payloadJson, String apiKey, String correlationId) {
+        logger.info("🌊 Processing streaming method: {}", paymentMethod.getRequestMethod());
+        logger.info("📦 Request: {}", payloadJson.toString());
+        
+        // Start processing in a separate thread to avoid blocking
+        new Thread(() -> {
+            try {
+                // Parse JSON to protobuf request
+                com.google.protobuf.Message.Builder requestBuilder = paymentMethod.getRequestBuilder();
+                JsonFormat.parser().ignoringUnknownFields().merge(payloadJson.toString(), requestBuilder);
+                PaymentInitiationRequest request = (PaymentInitiationRequest) requestBuilder.build();
+                
+                // Call the streaming method with correlation ID
+                callKodyInitiatePaymentStreamContinuous(request, apiKey, correlationId);
+                
+            } catch (Exception e) {
+                logger.error("❌ Error in payment stream", e);
+                publishErrorResponse(correlationId, "Stream error: " + e.getMessage());
+            }
+        }, "PaymentStream-" + correlationId).start();
     }
 
 
@@ -473,6 +509,113 @@ public class KodyPaymentService extends CommonContext {
         }
     }
 
+    private PaymentDetailsResponse callKodyInitiatePaymentStream(PaymentInitiationRequest request, String apiKey) {
+        ManagedChannel kodyChannel = null;
+        try {
+            kodyChannel = ManagedChannelBuilder.forAddress(kodyHostname, 443)
+                    .useTransportSecurity()
+                    .build();
+
+            KodyEcomPaymentsServiceGrpc.KodyEcomPaymentsServiceBlockingStub kodyClient = createKodyClient(kodyChannel, apiKey);
+
+            // The initiatePaymentStream method returns a stream, so we need to get the first response
+            java.util.Iterator<PaymentDetailsResponse> responseIterator = kodyClient.initiatePaymentStream(request);
+            if (responseIterator.hasNext()) {
+                return responseIterator.next();
+            } else {
+                return PaymentDetailsResponse.newBuilder()
+                        .setError(PaymentDetailsResponse.Error.newBuilder()
+                                .setType(PaymentDetailsResponse.Error.Type.UNKNOWN)
+                                .setMessage("No response received from Kody API"))
+                        .build();
+            }
+
+        } catch (Exception e) {
+            logger.error("❌ Kody API error", e);
+            return PaymentDetailsResponse.newBuilder()
+                    .setError(PaymentDetailsResponse.Error.newBuilder()
+                            .setType(PaymentDetailsResponse.Error.Type.UNKNOWN)
+                            .setMessage("Error: " + e.getMessage()))
+                    .build();
+        } finally {
+            if (kodyChannel != null) {
+                shutdownChannel(kodyChannel);
+            }
+        }
+    }
+
+    /**
+     * Continuously process payment stream responses and publish each as a Platform Event
+     * Keeps the stream open for up to STREAM_TIMEOUT_MINUTES to receive status updates
+     */
+    private void callKodyInitiatePaymentStreamContinuous(PaymentInitiationRequest request, String apiKey, String correlationId) {
+        ManagedChannel kodyChannel = null;
+        final int STREAM_TIMEOUT_MINUTES = 5; // Configurable timeout for stream
+        
+        try {
+            kodyChannel = ManagedChannelBuilder.forAddress(kodyHostname, 443)
+                    .useTransportSecurity()
+                    .build();
+
+            KodyEcomPaymentsServiceGrpc.KodyEcomPaymentsServiceBlockingStub kodyClient = createKodyClient(kodyChannel, apiKey);
+
+            logger.info("🌊 Starting payment stream for correlation ID: {}", correlationId);
+            
+            // Get the stream iterator
+            java.util.Iterator<PaymentDetailsResponse> responseIterator = kodyClient.initiatePaymentStream(request);
+            
+            long startTime = System.currentTimeMillis();
+            long timeoutMillis = STREAM_TIMEOUT_MINUTES * 60 * 1000;
+            int responseCount = 0;
+            
+            // Keep processing responses until stream ends or timeout
+            while (responseIterator.hasNext()) {
+                // Check for timeout
+                if (System.currentTimeMillis() - startTime > timeoutMillis) {
+                    logger.info("⏰ Stream timeout reached after {} minutes", STREAM_TIMEOUT_MINUTES);
+                    break;
+                }
+                
+                try {
+                    PaymentDetailsResponse response = responseIterator.next();
+                    responseCount++;
+                    
+                    // Convert response to JSON
+                    String responseJson = JsonFormat.printer().omittingInsignificantWhitespace().print(response);
+                    logger.info("📦 Stream response #{}: {}", responseCount, responseJson);
+                    
+                    // Publish each response as a Platform Event
+                    publishResponse(correlationId, "response.ecom.v1.InitiatePaymentStream", responseJson);
+                    
+                    // Log response details for monitoring
+                    if (response.hasResponse()) {
+                        logger.info("📊 Payment stream update received for payment");
+                    }
+                    
+                } catch (Exception e) {
+                    logger.error("❌ Error processing stream response", e);
+                    // Continue processing other responses even if one fails
+                }
+            }
+            
+            logger.info("✅ Stream completed. Total responses received: {}", responseCount);
+            
+            // If no responses were received, send an error
+            if (responseCount == 0) {
+                publishErrorResponse(correlationId, "No responses received from payment stream");
+            }
+
+        } catch (Exception e) {
+            logger.error("❌ Stream error", e);
+            publishErrorResponse(correlationId, "Stream error: " + e.getMessage());
+        } finally {
+            if (kodyChannel != null) {
+                logger.info("🔌 Closing stream channel");
+                shutdownChannel(kodyChannel);
+            }
+        }
+    }
+
     private KodyEcomPaymentsServiceGrpc.KodyEcomPaymentsServiceBlockingStub createKodyClient(ManagedChannel channel, String apiKey) {
         Metadata metadata = new Metadata();
         metadata.put(Metadata.Key.of("X-API-Key", Metadata.ASCII_STRING_MARSHALLER), apiKey);
@@ -582,20 +725,18 @@ public class KodyPaymentService extends CommonContext {
     }
 
     public static void main(String[] args) {
-        System.out.println("🔧 DEBUG: Main method started");
         if (args.length < 1) {
-            System.out.println("🔧 DEBUG: No arguments provided");
             logger.error("❌ Usage: java -cp app.jar kody.integration.KodyPaymentService sandbox");
             logger.error("   Or: ./run.sh kody.integration.KodyPaymentService sandbox");
             return;
         }
 
         String environment = args[0];
-        System.out.println("🔧 DEBUG: Environment: " + environment);
         logger.info("🚀 Starting Kody Payment Subscriber for environment: {}", environment);
 
         try {
-            ApplicationConfig config = new ApplicationConfig("arguments-" + environment + ".yaml");
+            // Use environment-first configuration loading
+            ApplicationConfig config = ApplicationConfig.createWithEnvironmentFirst(environment);
 
             try (KodyPaymentService subscriber = new KodyPaymentService(config)) {
                 subscriber.subscribeAndProcessPayments();

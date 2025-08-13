@@ -37,8 +37,36 @@ public class ApplicationConfig {
                 null, null, null,
                 false, false, ReplayPreset.LATEST, null, null);
     }
+    
+    /**
+     * Create ApplicationConfig with environment-first loading
+     * @param environmentName Environment name for fallback YAML file
+     * @return ApplicationConfig instance
+     * @throws IOException if neither environment variables nor YAML file can be loaded
+     */
+    public static ApplicationConfig createWithEnvironmentFirst(String environmentName) throws IOException {
+        ApplicationConfig config = new ApplicationConfig();
+        
+        // Try to load from environment variables first
+        if (config.loadFromEnvironment()) {
+            System.out.println("✅ Configuration loaded from environment variables");
+            return config;
+        }
+        
+        // Fall back to YAML file if environment variables are incomplete
+        System.out.println("📄 Loading configuration from YAML file: arguments-" + environmentName + ".yaml");
+        return new ApplicationConfig("arguments-" + environmentName + ".yaml");
+    }
     public ApplicationConfig(String filename) throws IOException {
-
+        // First try to load from environment variables
+        if (loadFromEnvironment()) {
+            System.out.println("✅ Configuration loaded from environment variables");
+            return;
+        }
+        
+        // Fall back to YAML file if environment variables are not complete
+        System.out.println("📄 Loading configuration from YAML file: " + filename);
+        
         Yaml yaml = new Yaml();
         InputStream inputStream = null;
         
@@ -99,6 +127,68 @@ public class ApplicationConfig {
         this.kodyHostname = obj.get("KODY_HOSTNAME") == null ? null : obj.get("KODY_HOSTNAME").toString();
         this.kodyApiKey = obj.get("KODY_API_KEY") == null ? null : obj.get("KODY_API_KEY").toString();
         this.kodyStoreId = obj.get("KODY_STORE_ID") == null ? null : obj.get("KODY_STORE_ID").toString();
+    }
+    
+    /**
+     * Load configuration from environment variables
+     * @return true if all required environment variables are present, false otherwise
+     */
+    private boolean loadFromEnvironment() {
+        String envLoginUrl = System.getenv("LOGIN_URL");
+        String envPubsubHost = System.getenv("PUBSUB_HOST");
+        String envPubsubPort = System.getenv("PUBSUB_PORT");
+        String envTopic = System.getenv("TOPIC");
+        
+        // Check if required environment variables are present
+        if (envLoginUrl == null || envPubsubHost == null || envPubsubPort == null || envTopic == null) {
+            return false;
+        }
+        
+        // Load required parameters
+        this.loginUrl = envLoginUrl;
+        this.pubsubHost = envPubsubHost;
+        this.pubsubPort = Integer.parseInt(envPubsubPort);
+        this.topic = envTopic;
+        
+        // Load authentication (either username/password or token/tenant)
+        this.username = System.getenv("USERNAME");
+        this.password = System.getenv("PASSWORD");
+        this.tenantId = System.getenv("TENANT_ID");
+        this.accessToken = System.getenv("ACCESS_TOKEN");
+        
+        // Validate authentication - must have either username/password or tenant/token
+        boolean hasUserPass = (username != null && password != null);
+        boolean hasTenantToken = (tenantId != null && accessToken != null);
+        
+        if (!hasUserPass && !hasTenantToken) {
+            return false;
+        }
+        
+        // Load optional parameters
+        this.userId = System.getenv("USER_ID");
+        this.plaintextChannel = Boolean.parseBoolean(System.getenv("USE_PLAINTEXT_CHANNEL"));
+        this.providedLoginUrl = Boolean.parseBoolean(System.getenv("USE_PROVIDED_LOGIN_URL"));
+        
+        // Load replay configuration
+        String replayPresetStr = System.getenv("REPLAY_PRESET");
+        if ("EARLIEST".equals(replayPresetStr)) {
+            this.replayPreset = ReplayPreset.EARLIEST;
+        } else if ("CUSTOM".equals(replayPresetStr)) {
+            this.replayPreset = ReplayPreset.CUSTOM;
+            String replayIdStr = System.getenv("REPLAY_ID");
+            if (replayIdStr != null) {
+                this.replayId = ReplayIdParser.getByteStringFromReplayIdString(replayIdStr);
+            }
+        } else {
+            this.replayPreset = ReplayPreset.LATEST;
+        }
+        
+        // Load Kody configuration
+        this.kodyHostname = System.getenv("KODY_HOSTNAME");
+        this.kodyApiKey = System.getenv("KODY_API_KEY");
+        this.kodyStoreId = System.getenv("KODY_STORE_ID");
+        
+        return true;
     }
 
     public ApplicationConfig(String username, String password, String loginUrl,

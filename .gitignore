@@ -58,6 +58,17 @@ Thumbs.db
 src/main/resources/arguments-*.yaml
 !src/main/resources/arguments-example.yaml
 
+# Environment files with actual credentials
+.env
+.env.sandbox
+.env.production
+.env.development
+.env.staging
+.env.local
+
+# Keep example files as templates
+!.env.*.example
+
 # Test output files
 test_output.log
 *.out
