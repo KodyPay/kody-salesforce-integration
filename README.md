@@ -62,17 +62,149 @@ Create Platform Event `KodyPayment__e` with these fields:
   "payerEmailAddress": "test@example.com"
 }' 'your-api-key'
 
+# Expected Response:
+{
+  "response": {
+    "paymentId": "P._pay.ABC123XYZ",
+    "paymentData": {
+      "paymentWallet": {
+        "paymentLinkId": "https://p-staging.kody.com/P._pay.ABC123XYZ"
+      }
+    }
+  }
+}
+
+# InitiatePaymentStream (Real-time updates - Ignyto preferred method)
+./run.sh samples.KodyPaymentPublisher sandbox request.ecom.v1.InitiatePaymentStream '{
+  "storeId": "your-store-id",
+  "paymentReference": "stream_123456",
+  "amountMinorUnits": 1500,
+  "currency": "GBP",
+  "orderId": "order_stream_123",
+  "returnUrl": "https://example.com/return",
+  "payerEmailAddress": "test@example.com"
+}' 'your-api-key'
+
+# Expected Response:
+# Stream Event 1 - Payment Initiated:
+{
+  "response": {
+    "paymentId": "P._pay.STREAM789",
+    "paymentData": {
+      "paymentWallet": {
+        "paymentLinkId": "https://p-staging.kody.com/P._pay.STREAM789"
+      }
+    }
+  }
+}
+
+# Stream Event 2 - Status Update (when customer completes payment):
+{
+  "response": {
+    "paymentId": "P._pay.STREAM789",
+    "paymentReference": "stream_123456",
+    "orderId": "order_stream_123",
+    "orderMetadata": "",
+    "status": "SUCCESS",
+    "dateCreated": "2025-08-19T14:30:14.313259Z",
+    "datePaid": "2025-08-19T14:32:55Z",
+    "pspReference": "DUMMY123REFERENCE",
+    "paymentData": {
+      "pspReference": "DUMMY123REFERENCE",
+      "paymentMethod": "MASTERCARD",
+      "paymentMethodVariant": "Mastercard Corporate Credit",
+      "authStatus": "AUTHORISED",
+      "authStatusDate": "2025-08-19T14:32:56.475653Z",
+      "paymentWallet": {
+        "cardLast4Digits": "1234",
+        "paymentLinkId": "P._pay.STREAM789"
+      }
+    },
+    "saleData": {
+      "amountMinorUnits": "1500",
+      "currency": "GBP",
+      "orderId": "order_stream_123",
+      "paymentReference": "stream_123456",
+      "orderMetadata": ""
+    }
+  }
+}
+
 # PaymentDetails (use payment ID from above)
 ./run.sh samples.KodyPaymentPublisher sandbox request.ecom.v1.PaymentDetails '{
   "storeId": "your-store-id",
   "paymentId": "P._pay.ABC123XYZ"
 }' 'your-api-key'
+# Expected Response:
+{
+  "response": {
+    "paymentId": "P._pay.ABC123XYZ",
+    "paymentReference": "pay_123456",
+    "orderId": "order_123456",
+    "orderMetadata": "",
+    "status": "SUCCESS",
+    "dateCreated": "2025-08-19T14:30:14.313259Z",
+    "datePaid": "2025-08-19T14:32:55Z",
+    "pspReference": "DUMMY123REFERENCE",
+    "paymentData": {
+      "pspReference": "DUMMY123REFERENCE",
+      "paymentMethod": "MASTERCARD",
+      "paymentMethodVariant": "Mastercard Corporate Credit",
+      "authStatus": "AUTHORISED",
+      "authStatusDate": "2025-08-19T14:32:56.475653Z",
+      "paymentWallet": {
+        "cardLast4Digits": "1234",
+        "paymentLinkId": "P._pay.ABC123XYZ"
+      }
+    },
+    "saleData": {
+      "amountMinorUnits": "1000",
+      "currency": "GBP",
+      "orderId": "order_123456",
+      "paymentReference": "pay_123456",
+      "orderMetadata": ""
+    }
+  }
+}
 
 # GetPayments
 ./run.sh samples.KodyPaymentPublisher sandbox request.ecom.v1.GetPayments '{
   "storeId": "your-store-id",
   "pageCursor": {"page": 1, "pageSize": 10}
 }' 'your-api-key'
+
+# Expected Response:
+{
+  "response": {
+    "total": "3",
+    "payments": [
+      {
+        "paymentId": "P._pay.ABC123XYZ",
+        "paymentReference": "pay_123456",
+        "orderId": "order_123456",
+        "orderMetadata": "",
+        "status": "SUCCESS",
+        "dateCreated": "2025-08-19T14:30:00.123456Z"
+      },
+      {
+        "paymentId": "P._pay.DEF789UVW",
+        "paymentReference": "pay_789012",
+        "orderId": "order_789012",
+        "orderMetadata": "",
+        "status": "EXPIRED",
+        "dateCreated": "2025-08-18T10:15:30.654321Z"
+      },
+      {
+        "paymentId": "P._pay.GHI345JKL",
+        "paymentReference": "pay_345678",
+        "orderId": "order_345678",
+        "orderMetadata": "",
+        "status": "PENDING",
+        "dateCreated": "2025-08-17T16:45:22.987654Z"
+      }
+    ]
+  }
+}
 
 # Refund
 ./run.sh samples.KodyPaymentPublisher sandbox request.ecom.v1.Refund '{
@@ -81,6 +213,18 @@ Create Platform Event `KodyPayment__e` with these fields:
   "amount": "10.00",
   "reason": "Customer request"
 }' 'your-api-key'
+
+# Expected Response:
+{
+  "status": "REQUESTED",
+  "paymentId": "P._pay.ABC123XYZ",
+  "dateCreated": "2025-08-19T15:00:51.580125Z",
+  "totalPaidAmount": "10.00",
+  "totalAmountRefunded": "10.00",
+  "remainingAmount": "0.00",
+  "totalAmountRequested": "10.00",
+  "paymentTransactionId": "12345678-1234-5678-9012-123456789abc"
+}
 ```
 
 ## 📋 Supported APIs
@@ -88,6 +232,7 @@ Create Platform Event `KodyPayment__e` with these fields:
 | API | Purpose | Required Fields |
 |-----|---------|----------------|
 | **InitiatePayment** | Creates new payment requests | `storeId`, `paymentReference`, `amountMinorUnits`, `currency` |
+| **InitiatePaymentStream** | Creates payment with real-time status updates (Preferred) | `storeId`, `paymentReference`, `amountMinorUnits`, `currency` |
 | **PaymentDetails** | Retrieves payment information by ID | `storeId`, `paymentId` |
 | **GetPayments** | Lists payments with pagination | `storeId`, `pageCursor` |
 | **Refund** | Processes payment refunds | `storeId`, `paymentId`, `amount` |
